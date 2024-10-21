@@ -9,6 +9,7 @@ import { provideCompletions } from "./complete";
 import { provideHover } from "./hover";
 import { provideValidations } from "./validate";
 import { provideDefinitions } from "./definition";
+import { provideDocumentSymbols } from "./document-symbols";
 // import { provideDocumentSymbols } from "./document-symbols";
 
 export const create = (
@@ -19,6 +20,7 @@ export const create = (
     capabilities: {
       hoverProvider: true,
       definitionProvider: true,
+      documentSymbolProvider: true,
       diagnosticProvider: {
         interFileDependencies: false,
         workspaceDiagnostics: false,
@@ -49,13 +51,12 @@ export const create = (
     },
     create(context): LanguageServicePluginInstance {
       return {
-        // TODO: Is this necessary?
-        // provideDocumentSymbols(document, token) {
-        //   if (token.isCancellationRequested) return;
-        //   return worker(document, (virtualCode) => {
-        //     return provideDocumentSymbols(virtualCode);
-        //   });
-        // },
+        provideDocumentSymbols(document, token) {
+          if (token.isCancellationRequested) return;
+          return worker(document, (virtualCode) => {
+            return provideDocumentSymbols(virtualCode);
+          });
+        },
         provideDefinition(document, position, token) {
           if (token.isCancellationRequested) return;
           return worker(document, (virtualCode) => {

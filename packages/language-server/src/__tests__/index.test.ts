@@ -1,20 +1,26 @@
 import fs from "fs";
 import path from "path";
 import snapshot from "mocha-snap";
-// import { bench, run } from "mitata";
-
-import { URI } from "vscode-uri";
 import { TextDocument } from "vscode-languageserver-textdocument";
-import { CancellationToken, Position } from "vscode-languageserver";
-import { Project } from "@marko/language-tools";
-import MarkoLangaugeService, { documents } from "../service";
+import { Position } from "vscode-languageserver";
 import { codeFrame } from "./util/code-frame";
+import { getLanguageService } from "./util/language-service";
 
-Project.setDefaultTypePaths({
-  internalTypesFile: require.resolve(
-    "@marko/language-tools/marko.internal.d.ts",
-  ),
-  markoTypesFile: require.resolve("marko/index.d.ts"),
+// Project.setDefaultTypePaths({
+//   internalTypesFile: require.resolve(
+//     "@marko/language-tools/marko.internal.d.ts",
+//   ),
+//   markoTypesFile: require.resolve("marko/index.d.ts"),
+// });
+
+before(async () => {
+  await getLanguageService();
+  // TODO: Warm up the server?
+});
+
+after(async () => {
+  const { serverHandle } = await getLanguageService();
+  serverHandle.connection.dispose();
 });
 
 // const SHOULD_BENCH = process.env.BENCH;
@@ -30,28 +36,15 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
       const fixtureDir = path.join(fixtureSubdir, entry);
 
       for (const filename of loadMarkoFiles(fixtureDir)) {
-        const doc = documents.get(URI.file(filename).toString())!;
+        const { serverHandle } = await getLanguageService();
+        const doc = await serverHandle.openTextDocument(filename, "marko");
         const code = doc.getText();
-        const params = {
-          textDocument: {
-            uri: doc.uri,
-            languageId: doc.languageId,
-            version: doc.version,
-            text: code,
-          },
-        } as const;
-        documents.doOpen(params);
-
         let results = "";
 
         for (const position of getHovers(doc)) {
-          const hoverInfo = await MarkoLangaugeService.doHover(
-            doc,
-            {
-              position,
-              textDocument: doc,
-            },
-            CancellationToken.None,
+          const hoverInfo = await serverHandle.sendHoverRequest(
+            doc.uri,
+            position,
           );
           const loc = { start: position, end: position };
 
@@ -82,12 +75,13 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
           results = `## Hovers\n${results}`;
         }
 
-        const errors = await MarkoLangaugeService.doValidate(doc);
-
-        if (errors && errors.length) {
+        const report = await serverHandle.sendDocumentDiagnosticRequest(
+          doc.uri,
+        );
+        if (report.kind === "full" && report.items && report.items.length) {
           results += "## Diagnostics\n";
 
-          for (const error of errors) {
+          for (const error of report.items) {
             const loc = {
               start: error.range.start,
               end: error.range.end,
@@ -98,7 +92,7 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
           }
         }
 
-        documents.doClose(params);
+        await serverHandle.closeTextDocument(doc.uri);
 
         await snapshot(results, {
           file: path.relative(fixtureDir, filename.replace(/\.marko$/, ".md")),

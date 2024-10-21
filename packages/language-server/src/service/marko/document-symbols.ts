@@ -1,59 +1,54 @@
-// import { SymbolInformation, SymbolKind } from "vscode-languageserver";
-// import { type Node, NodeType } from "@marko/language-tools";
-// import type { Plugin } from "../types";
-// import { MarkoFile, processDoc } from "../../utils/file";
+import { type Node, NodeType } from "@marko/language-tools";
+import { DocumentSymbol, SymbolKind } from "vscode-languageserver-protocol";
+import { MarkoVirtualCode } from "../core/marko-plugin";
 
-// export const findDocumentSymbols: Plugin["findDocumentSymbols"] = async (doc) =>
-//   processDoc(doc, extractDocumentSymbols);
+/**
+ * Iterate over the Marko CST and extract all the symbols (mostly tags) in the document.
+ */
+export function provideDocumentSymbols(
+  file: MarkoVirtualCode,
+): DocumentSymbol[] {
+  const symbols: DocumentSymbol[] = [];
+  const { program } = file.markoAst;
+  const visit = (node: Node.ChildNode) => {
+    switch (node.type) {
+      case NodeType.Tag:
+      case NodeType.AttrTag:
+        symbols.push({
+          name:
+            (node.type === NodeType.AttrTag
+              ? node.nameText?.slice(node.nameText.indexOf("@"))
+              : node.nameText) || "<${...}>",
+          kind:
+            (node.nameText &&
+              file.tagLookup.getTag(node.nameText)?.html &&
+              SymbolKind.Property) ||
+            SymbolKind.Class,
+          range: {
+            start: file.markoAst.positionAt(node.start),
+            end: file.markoAst.positionAt(node.end),
+          },
+          selectionRange: {
+            start: file.markoAst.positionAt(node.start),
+            end: file.markoAst.positionAt(node.end),
+          },
+        });
 
-// /**
-//  * Iterate over the Marko CST and extract all the symbols (mostly tags) in the document.
-//  */
-// function extractDocumentSymbols({
-//   uri,
-//   scheme,
-//   parsed,
-//   lookup,
-// }: MarkoFile): SymbolInformation[] {
-//   if (scheme !== "file") {
-//     return [];
-//   }
+        if (node.body) {
+          for (const child of node.body) {
+            visit(child);
+          }
+        }
 
-//   const symbols: SymbolInformation[] = [];
-//   const { program } = parsed;
-//   const visit = (node: Node.ChildNode) => {
-//     switch (node.type) {
-//       case NodeType.Tag:
-//       case NodeType.AttrTag:
-//         symbols.push({
-//           name:
-//             (node.type === NodeType.AttrTag
-//               ? node.nameText?.slice(node.nameText.indexOf("@"))
-//               : node.nameText) || "<${...}>",
-//           kind:
-//             (node.nameText &&
-//               lookup.getTag(node.nameText)?.html &&
-//               SymbolKind.Property) ||
-//             SymbolKind.Class,
-//           location: {
-//             uri,
-//             range: parsed.locationAt(node),
-//           },
-//         });
+        break;
+    }
+  };
 
-//         if (node.body) {
-//           for (const child of node.body) {
-//             visit(child);
-//           }
-//         }
+  for (const item of program.body) {
+    visit(item);
+  }
 
-//         break;
-//     }
-//   };
+  console.log("Symbolts", symbols);
 
-//   for (const item of program.body) {
-//     visit(item);
-//   }
-
-//   return symbols;
-// }
+  return symbols;
+}

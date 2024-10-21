@@ -22,6 +22,7 @@
     "@volar/language-core": "^2.4.5",
     "@volar/language-server": "^2.4.5",
     "@volar/language-service": "^2.4.5",
+    "@volar/test-utils": "^2.4.5",
     "@volar/typescript": "^2.4.5",
     "volar-service-css": "^0.0.62",
     "volar-service-emmet": "^0.0.62",
