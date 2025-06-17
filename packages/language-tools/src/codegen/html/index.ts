@@ -1,3 +1,5 @@
+import type { SourceMapGenerator } from "source-map-js";
+
 import { type Node, NodeType, Parsed, Range } from "../../parser";
 import { SourceMapCodegen } from "../util/source-map-codegen";
 import {
@@ -9,6 +11,14 @@ import {
 export function extractHTML(parsed: Parsed) {
   return new HTMLExtractor(parsed).end();
 }
+
+export type HtmlExtraction = {
+  code: string;
+  map: SourceMapGenerator;
+  nodeDetails: {
+    [id: string]: { hasDynamicAttrs: boolean; hasDynamicBody: boolean };
+  };
+};
 
 class HTMLExtractor {
   #codegen: SourceMapCodegen;
@@ -26,7 +36,7 @@ class HTMLExtractor {
     parsed.program.body.forEach((node) => this.#visitNode(node));
   }
 
-  end() {
+  end(): HtmlExtraction {
     const result = this.#codegen.end();
     return {
       code: result.code,

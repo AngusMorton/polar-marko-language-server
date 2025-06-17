@@ -1,10 +1,81 @@
-import type { TextDocument } from "vscode-languageserver-textdocument";
+import { getLines, getLocation, type Location } from "@marko/language-tools";
+import type { Diagnostic, LanguageServicePlugin } from "@volar/language-server";
 import axe from "axe-core";
 import { JSDOM } from "jsdom";
-import type { Diagnostic, LanguageServicePlugin } from "@volar/language-server";
+import type { SourceMapGenerator } from "source-map-js";
+import type { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
+
 import { MarkoVirtualCode } from "../../language";
 import { ruleExceptions } from "./axe-rules/rule-exceptions";
+
+// Helper function to convert generated offsets back to source locations using source map
+function sourceLocationAt(
+  sourceMapGenerator: SourceMapGenerator,
+  originalSourceText: string,
+  generatedStart: number,
+  generatedEnd: number,
+): Location | undefined {
+  try {
+    // Convert SourceMapGenerator to JSON for consumption
+    const sourceMap = sourceMapGenerator.toJSON();
+    const { SourceMapConsumer } = require("source-map-js");
+    const consumer = new SourceMapConsumer(sourceMap);
+
+    // Find the original position for the generated start
+    const startPos = consumer.originalPositionFor({
+      line: 1, // For now, assume single line - this could be improved
+      column: generatedStart,
+    });
+
+    const endPos = consumer.originalPositionFor({
+      line: 1,
+      column: generatedEnd,
+    });
+
+    if (
+      startPos.line !== null &&
+      startPos.column !== null &&
+      endPos.line !== null &&
+      endPos.column !== null
+    ) {
+      // Convert back to offsets and create location
+      const startOffset = convertLineColumnToOffset(
+        startPos.line - 1,
+        startPos.column,
+        originalSourceText,
+      );
+      const endOffset = convertLineColumnToOffset(
+        endPos.line - 1,
+        endPos.column,
+        originalSourceText,
+      );
+
+      // Get lines for getLocation call
+      const sourceLines = getLines(originalSourceText);
+      return getLocation(sourceLines, startOffset, endOffset);
+    }
+  } catch (error) {
+    console.warn("Failed to map generated offset to source location:", error);
+  }
+  return undefined;
+}
+
+// Helper function to convert line/column to offset
+function convertLineColumnToOffset(
+  line: number,
+  column: number,
+  text: string,
+): number {
+  const lines = text.split("\n");
+  let offset = 0;
+
+  for (let i = 0; i < line && i < lines.length; i++) {
+    offset += lines[i].length + 1; // +1 for newline character
+  }
+
+  return offset + column;
+}
 
 // This plugin provides accessibility diagnostics for Marko templates.
 export const create = (): LanguageServicePlugin => {
@@ -27,7 +98,7 @@ export const create = (): LanguageServicePlugin => {
               return [];
             }
 
-            const htmlText = htmlAst.extracted.toString();
+            const htmlText = htmlAst.code;
             const jsdom = new JSDOM(htmlText, {
               includeNodeLocations: true,
             });
@@ -77,7 +148,14 @@ export const create = (): LanguageServicePlugin => {
               const generatedLoc = jsdom.nodeLocation(element);
               if (!generatedLoc) return [];
 
-              const sourceRange = htmlAst.extracted.sourceLocationAt(
+              // Get the original source text from the source map's source content
+              const sourceMapJson = htmlAst.map.toJSON();
+              const originalSourceText =
+                sourceMapJson.sourcesContent?.[0] || "";
+
+              const sourceRange = sourceLocationAt(
+                htmlAst.map,
+                originalSourceText,
                 generatedLoc.startOffset + 1,
                 generatedLoc.startOffset + 1 + element.tagName.length,
               );
