@@ -1,4 +1,4 @@
-export * from "./extractors/html";
+export * from "./codegen/html";
 export * from "./extractors/script";
 export * from "./extractors/style";
 export * from "./parser";

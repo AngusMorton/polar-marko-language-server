@@ -4,10 +4,9 @@ import type { CodeMapping, VirtualCode } from "@volar/language-core";
 export function parseHtml(
   parsed: ReturnType<typeof extractHTML>,
 ): VirtualCode[] {
-  const scriptText = parsed.extracted.toString();
-  const mappings: CodeMapping[] = generateMappingsFromExtracted(
-    parsed.extracted,
-  );
+  const scriptText = parsed.code;
+  const sourceMap = parsed.map;
+  const mappings: CodeMapping[] = generateMappingsFromExtracted(sourceMap);
 
   if (mappings.length > 0) {
     return [
@@ -28,6 +27,7 @@ export function parseHtml(
   return [];
 }
 
+// Old implementation.
 function generateMappingsFromExtracted(extracted: Extracted): CodeMapping[] {
   return extracted.tokens.map((it) => {
     return {
