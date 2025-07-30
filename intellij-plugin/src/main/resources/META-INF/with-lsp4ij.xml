@@ -1,0 +1,9 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <!-- LSP4IJ server definition for Community Edition fallback -->
+        <server 
+            id="marko-language-server"
+            name="Marko Language Server"
+            factoryClass="com.markojs.intellij.lsp4ij.MarkoLanguageServerFactory"/>
+    </extensions>
+</idea-plugin>

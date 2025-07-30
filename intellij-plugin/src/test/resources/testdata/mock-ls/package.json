@@ -1,0 +1,12 @@
+{
+  "name": "mock-marko-language-server",
+  "version": "1.0.0-test",
+  "description": "Mock Marko Language Server for testing",
+  "main": "main.js",
+  "bin": {
+    "mock-marko-language-server": "./main.js"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

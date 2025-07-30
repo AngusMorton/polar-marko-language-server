@@ -1,0 +1,71 @@
+<idea-plugin>
+    <id>com.markojs.intellij-plugin</id>
+    <name>Marko Language Support</name>
+    <vendor email="support@markojs.com" url="https://markojs.com">Marko Team</vendor>
+    
+    <description><![CDATA[
+        Provides comprehensive language support for Marko template files (.marko) including:
+        <ul>
+            <li>Syntax highlighting and code folding</li>
+            <li>Code completion and IntelliSense</li>
+            <li>Error highlighting and diagnostics</li>
+            <li>Go to definition and find usages</li>
+            <li>Hover information and documentation</li>
+            <li>Code formatting and refactoring</li>
+        </ul>
+        
+        This plugin integrates with the official Marko Language Server to provide these features.
+        For IntelliJ IDEA Community Edition users, the LSP4IJ plugin is required for full functionality.
+    ]]></description>
+    
+    <change-notes><![CDATA[
+        <h3>1.0.0</h3>
+        <ul>
+            <li>Initial release with full Language Server Protocol support</li>
+            <li>Syntax highlighting for .marko files</li>
+            <li>Code completion and diagnostics</li>
+            <li>Support for both Ultimate and Community editions</li>
+        </ul>
+    ]]></change-notes>
+    
+    <!-- Requires IntelliJ Platform 2024.1+ -->
+    <idea-version since-build="241" until-build="243.*"/>
+    
+    <!-- Optional dependency on LSP4IJ for Community Edition support -->
+    <depends optional="true" config-file="with-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
+    
+    <resource-bundle>messages.MarkoBundle</resource-bundle>
+    
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File type registration -->
+        <fileType 
+            name="Marko" 
+            implementationClass="com.markojs.intellij.MarkoFileType" 
+            fieldName="INSTANCE" 
+            language="Marko" 
+            extensions="marko"/>
+        
+        <!-- Language registration -->
+        <lang.parserDefinition 
+            language="Marko" 
+            implementationClass="com.markojs.intellij.MarkoParserDefinition"/>
+        
+        <!-- Native LSP support for Ultimate/Commercial IDEs -->
+        <platform.lsp.serverSupportProvider 
+            implementation="com.markojs.intellij.lsp.MarkoLspServerSupportProvider"/>
+        
+        <!-- Icon provider -->
+        <iconProvider implementation="com.markojs.intellij.MarkoIconProvider"/>
+        
+        <!-- Notification group for plugin messages -->
+        <notificationGroup 
+            id="Marko Plugin" 
+            displayType="BALLOON"/>
+    </extensions>
+    
+    <applicationListeners>
+        <listener 
+            class="com.markojs.intellij.MarkoPluginStartupListener" 
+            topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+</idea-plugin>
