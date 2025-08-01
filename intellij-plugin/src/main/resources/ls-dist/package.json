@@ -1,0 +1,12 @@
+{
+  "name": "marko-intellij-plugin",
+  "version": "1.0.0",
+  "description": "Node.js dependencies for Marko IntelliJ Plugin",
+  "private": true,
+  "dependencies": {
+    "@marko/language-server": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20.11.1"
+  }
+}

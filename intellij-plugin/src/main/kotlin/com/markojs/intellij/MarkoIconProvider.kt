@@ -15,6 +15,12 @@ class MarkoIconProvider : IconProvider() {
     }
     
     override fun getIcon(element: PsiElement, flags: Int): Icon? {
-        return if (element is MarkoPsiFile) MARKO_ICON else null
+        // Check if the element is from a Marko file
+        val containingFile = element.containingFile
+        return if (containingFile?.fileType == MarkoFileType.INSTANCE) {
+            MARKO_ICON
+        } else {
+            null
+        }
     }
 }

@@ -23,7 +23,10 @@ import org.junit.runners.Suite
     MarkoServerDescriptorTest::class,
     
     // Compatibility and graceful degradation tests
-    MarkoCompatibilityTest::class
+    MarkoCompatibilityTest::class,
+    
+    // Specification compliance validation
+    MarkoSpecificationComplianceTest::class
 )
 class MarkoTestSuite {
     // This class serves as a test suite runner

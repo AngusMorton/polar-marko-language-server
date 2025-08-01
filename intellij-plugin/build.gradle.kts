@@ -20,7 +20,7 @@ repositories {
 dependencies {
     intellijPlatform {
         intellijIdeaUltimate("2024.1")
-        bundledPlugins("com.intellij.java")
+        bundledPlugins("com.intellij.java", "org.jetbrains.plugins.textmate")
         pluginVerifier()
         zipSigner()
         
@@ -58,7 +58,7 @@ intellijPlatform {
         
         ideaVersion {
             sinceBuild = "241"
-            untilBuild = "243.*"
+            untilBuild = "261.*"
         }
     }
     
@@ -191,6 +191,16 @@ tasks.named("prepareSandbox") {
                 into(lsDistDir)
             }
         }
+    }
+}
+
+// Configure buildPlugin to include bundled resources in the distribution
+tasks.named<Zip>("buildPlugin") {
+    dependsOn(prepareBundledResources)
+    
+    // Add bundled resources directly to the ZIP
+    from("src/main/resources/ls-dist") {
+        into("lib/ls-dist")
     }
 }
 

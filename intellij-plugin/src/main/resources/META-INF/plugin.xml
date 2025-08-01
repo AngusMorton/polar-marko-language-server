@@ -29,8 +29,15 @@
     ]]></change-notes>
     
     <!-- Requires IntelliJ Platform 2024.1+ -->
-    <idea-version since-build="241" until-build="243.*"/>
+    <idea-version since-build="241" until-build="261.*"/>
     
+    <!-- Core platform modules -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+
+    <!-- TextMate plugin dependency -->
+    <depends>org.jetbrains.plugins.textmate</depends>
+
     <!-- Optional dependency on LSP4IJ for Community Edition support -->
     <depends optional="true" config-file="with-lsp4ij.xml">com.redhat.devtools.lsp4ij</depends>
     
@@ -45,23 +52,33 @@
             language="Marko" 
             extensions="marko"/>
         
-        <!-- Language registration -->
-        <lang.parserDefinition 
-            language="Marko" 
-            implementationClass="com.markojs.intellij.MarkoParserDefinition"/>
+        <!-- No custom parser - all language intelligence delegated to LSP per specification -->
         
         <!-- Native LSP support for Ultimate/Commercial IDEs -->
         <platform.lsp.serverSupportProvider 
             implementation="com.markojs.intellij.lsp.MarkoLspServerSupportProvider"/>
         
+        <!-- LSP semantic tokens support (not yet available in this IntelliJ version) -->
+        <!-- <platform.lsp.semanticTokensSupport 
+            implementation="com.markojs.intellij.lsp.MarkoLspSemanticTokensSupport"/> -->
+        
         <!-- Icon provider -->
         <iconProvider implementation="com.markojs.intellij.MarkoIconProvider"/>
+        
+        <!-- Syntax highlighting -->
+        <lang.syntaxHighlighterFactory 
+            language="Marko" 
+            implementationClass="com.markojs.intellij.MarkoSyntaxHighlighterFactory"/>
+        
+        <!-- TextMate bundle provider for proper syntax highlighting -->
+        <textmate.bundleProvider implementation="com.markojs.intellij.MarkoTextMateBundleProvider"/>
         
         <!-- Notification group for plugin messages -->
         <notificationGroup 
             id="Marko Plugin" 
             displayType="BALLOON"/>
     </extensions>
+    
     
     <applicationListeners>
         <listener 

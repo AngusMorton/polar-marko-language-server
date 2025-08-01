@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>name</key>
+	<string>Marko</string>
+	<key>uuid</key>
+	<string>8B80F9E3-4B07-4C7A-9C3A-7C9F2E8D5A9F</string>
+	<key>contactEmailRot13</key>
+	<string>fhccbeg@znexbwf.pbz</string>
+	<key>description</key>
+	<string>Marko template language syntax highlighting</string>
+	<key>mainMenu</key>
+	<dict>
+		<key>items</key>
+		<array>
+			<string>------------------------------------</string>
+		</array>
+		<key>submenus</key>
+		<dict/>
+	</dict>
+</dict>
+</plist>
