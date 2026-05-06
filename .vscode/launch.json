@@ -23,7 +23,7 @@
       "args": [
         "--disable-extensions",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/vscode",
-        "${workspaceFolder}/packages/language-server/src/__tests__/fixtures"
+        "${workspaceFolder}/packages/language-server-volar/src/__tests__/fixtures"
       ],
       "outFiles": [
         "${workspaceFolder}/**/dist/*.js",

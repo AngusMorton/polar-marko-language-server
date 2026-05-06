@@ -1,1 +1,1 @@
-import "../../language-server/src";
+import "../../language-server-volar/src";
