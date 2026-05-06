@@ -1,26 +1,31 @@
 {
   "name": "polar-vscode",
-  "description": "Language Tools for Marko built using Volar",
+  "displayName": "Polar: Marko Language Tools",
   "version": "0.2.5",
-  "activationEvents": [
-    "workspaceContains:**/*.marko"
-  ],
-  "bugs": "https://github.com/AngusMorton/marko-language-server/issues/new",
+  "private": true,
+  "description": "Language Tools for Marko built using Volar",
   "categories": [
     "Programming Languages"
   ],
+  "homepage": "https://github.com/AngusMorton/marko-language-server/tree/main/packages/vscode/README.md",
+  "bugs": "https://github.com/AngusMorton/marko-language-server/issues/new",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AngusMorton/marko-language-server/tree/main/packages/vscode/"
+  },
+  "license": "MIT",
+  "publisher": "AngusMorton",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b && tsx build.mts",
+    "prepare": "mkdir -p ./node_modules; cp -r ./modules/* ./node_modules/",
+    "release": "tsx release.mts",
+    "test": "tsx test.mts"
+  },
   "contributes": {
-    "languages": [
+    "breakpoints": [
       {
-        "id": "marko",
-        "aliases": [
-          "Marko",
-          "marko"
-        ],
-        "extensions": [
-          ".marko"
-        ],
-        "configuration": "./marko.configuration.json"
+        "language": "marko"
       }
     ],
     "commands": [
@@ -45,17 +50,28 @@
         "category": "Marko"
       }
     ],
-    "typescriptServerPlugins": [
-      {
-        "name": "marko-ts-plugin",
-        "enableForWorkspaceTypeScriptVersions": true
+    "configuration": {
+      "type": "object",
+      "title": "Marko",
+      "properties": {
+        "marko.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VSCode and the language server."
+        }
       }
-    ],
-    "breakpoints": [
-      {
-        "language": "marko"
+    },
+    "configurationDefaults": {
+      "[marko]": {
+        "editor.defaultFormatter": "AngusMorton.polar-vscode"
       }
-    ],
+    },
     "grammars": [
       {
         "language": "marko",
@@ -83,58 +99,42 @@
         }
       }
     ],
-    "configuration": {
-      "type": "object",
-      "title": "Marko",
-      "properties": {
-        "marko.trace.server": {
-          "scope": "window",
-          "type": "string",
-          "enum": [
-            "off",
-            "messages",
-            "verbose"
-          ],
-          "default": "off",
-          "description": "Traces the communication between VSCode and the language server."
-        }
+    "languages": [
+      {
+        "id": "marko",
+        "aliases": [
+          "Marko",
+          "marko"
+        ],
+        "extensions": [
+          ".marko"
+        ],
+        "configuration": "./marko.configuration.json"
       }
-    },
-    "configurationDefaults": {
-      "[marko]": {
-        "editor.defaultFormatter": "AngusMorton.polar-vscode"
+    ],
+    "typescriptServerPlugins": [
+      {
+        "name": "marko-ts-plugin",
+        "enableForWorkspaceTypeScriptVersions": true
       }
-    }
+    ]
   },
+  "activationEvents": [
+    "workspaceContains:**/*.marko"
+  ],
   "devDependencies": {
-    "@marko/language-server-volar": "^2.0.3",
+    "@marko/volar-language-server": "^2.0.3",
     "@types/vscode": "^1.80.0",
-    "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^3.6.0",
     "@volar/language-server": "^2.4.14",
     "@volar/vscode": "^2.4.14",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
     "ovsx": "^0.10.5",
     "tsx": "^4.20.3",
     "vscode-languageclient": "^9.0.1"
   },
-  "displayName": "Polar: Marko Language Tools",
   "engines": {
     "vscode": "^1.80.0"
   },
-  "homepage": "https://github.com/AngusMorton/marko-language-server/tree/main/packages/vscode/README.md",
-  "icon": "img/marko.png",
-  "license": "MIT",
-  "main": "./dist/index.js",
-  "private": true,
-  "publisher": "AngusMorton",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/AngusMorton/marko-language-server/tree/main/packages/vscode/"
-  },
-  "scripts": {
-    "build": "tsc -b && tsx build.mts",
-    "release": "tsx release.mts",
-    "test": "tsx test.mts",
-    "prepare": "mkdir -p ./node_modules; cp -r ./modules/* ./node_modules/"
-  }
+  "icon": "img/marko.png"
 }

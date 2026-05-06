@@ -6,64 +6,75 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.ref }}"
+  cancel-in-progress: true
+
 jobs:
-  lint:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Use node
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v6
+      - name: Install node
+        id: node
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: lts/*
           cache: npm
-      - name: Install dependencies
+      - name: Install packages (node@${{ steps.node.outputs.node-version }})
         run: npm ci
-      - name: Format Code
-        run: npm run lint
+      - name: Run build
+        run: npm run @ci:build
+      - name: Run lint
+        run: npm run @ci:lint
   test:
     runs-on: ubuntu-latest
     name: "test: node@${{ matrix.node }}"
     strategy:
       fail-fast: false
       matrix:
-        node: [22]
+        node: [22, 24]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Use node@${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v6
+      - name: Install node
+        id: node
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - name: Install dependencies
+      - name: Install packages (node@${{ steps.node.outputs.node-version }})
         run: npm ci
       - name: Run tests
-        run: xvfb-run -a npm test
+        run: xvfb-run -a npm run @ci:test
   release:
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [build, test]
     if: "${{ github.repository_owner == 'marko-js' && github.event_name == 'push' }}"
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Use node
-        uses: actions/setup-node@v4
+        uses: actions/checkout@v6
+      - name: Install node
+        id: node
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: lts/*
           cache: npm
-      - name: Install dependencies
+      - name: Install packages (node@${{ steps.node.outputs.node-version }})
         run: npm ci
-      - name: Release
-        id: changesets
+      - name: Run release
         uses: changesets/action@v1
         with:
-          version: npm run version
-          publish: npm run release
+          version: npm run @ci:version
+          publish: npm run @ci:release
           commit: "[ci] release"
           title: "[ci] release"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
           VSCE_PAT: ${{ secrets.VSCE_PAT }}

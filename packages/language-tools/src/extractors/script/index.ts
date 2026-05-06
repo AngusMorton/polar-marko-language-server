@@ -1,4 +1,4 @@
-import type * as t from "@babel/types";
+import type { types as t } from "@marko/compiler";
 import type { TagDefinition, TaglibLookup } from "@marko/compiler/babel-utils";
 import { relativeImportPath } from "relative-import-path";
 import type TS from "typescript/lib/tsserverlibrary";
@@ -16,12 +16,13 @@ import { Extractor } from "../../util/extractor";
 import type { Meta } from "../../util/project";
 import {
   crawlProgramScope,
-  getBoundAttrMemberExpressionStartOffset,
-  getHoists,
+  getBoundAttrRange,
   getHoistSources,
   getMutatedVars,
+  getProgramBindings,
   hasHoists,
   isMutatedVar,
+  type Mutation,
 } from "./util/attach-scopes";
 import { getComponentFilename } from "./util/get-component-filename";
 import { getRuntimeAPI, RuntimeAPI } from "./util/get-runtime-api";
@@ -36,7 +37,7 @@ const SEP_COMMA_SPACE = ", ";
 const SEP_COMMA_NEW_LINE = ",\n";
 const VAR_LOCAL_PREFIX = "__marko_internal_";
 const VAR_SHARED_PREFIX = `Marko._.`;
-const ATTR_UNAMED = "value";
+const ATTR_UNNAMED = "value";
 const REG_EXT = /(?<=[/\\][^/\\]+)\.[^.]+$/;
 const REG_BLOCK = /\s*{/y;
 const REG_NEW_LINE = /^|(\r?\n)/g;
@@ -49,6 +50,9 @@ const REG_OBJECT_PROPERTY = /^[_$a-z][_$a-z0-9]*$/i;
 const REG_COMMENT_PRAGMA = /\/\/(?:\s*@ts-|\/\s*<)/y;
 const REG_TAG_NAME_IDENTIFIER = /^[A-Z][a-zA-Z0-9_$]+$/;
 const IF_TAG_ALTERNATES = new WeakMap<IfTag, IfTagAlternates>();
+const TAG_ID = new WeakMap<Node.Tag, number>();
+const RENDER_VAR = new WeakMap<Node.Tag, string>();
+const TEMPLATE_VAR = new WeakMap<Node.Tag, string>();
 const WROTE_COMMENT = new WeakSet<Node.Comment>();
 const START_OF_FILE: Range = { start: 0, end: 0 };
 
@@ -79,7 +83,6 @@ type AttrTagTree = {
 // TODO: completions within attr whitespace should not include quotes.
 // TODO: handle top level attribute tags.
 // TODO: css modules
-// TODO: should support member expression tag vars.
 // TODO: support #style directive with custom extension, eg `#style.less=""`.
 
 // SUPER LATER TODOS:
@@ -109,34 +112,39 @@ export function extractScript(opts: ExtractScriptOptions) {
 class ScriptExtractor {
   #code: string;
   #filename: string;
+  #api: RuntimeAPI;
+  #interop: boolean;
   #parsed: Parsed;
   #extractor: Extractor;
-  #scriptParser: ScriptParser;
+  #ast: ScriptParser;
   #read: Parsed["read"];
   #lookup: TaglibLookup;
-  #tagIds = new Map<Node.ParentTag, number>();
-  #renderIds = new Map<Node.ParentTag, number>();
   #scriptLang: ScriptLang;
   #ts: ExtractScriptOptions["ts"];
   #runtimeTypes: ExtractScriptOptions["runtimeTypesCode"];
-  #api: RuntimeAPI;
-  #mutationOffsets: Repeatable<number>;
+  #mutations: Repeatable<Mutation>;
   #tagId = 1;
-  #renderId = 1;
+  #closeBrackets: number[] = [0];
   constructor(opts: ExtractScriptOptions) {
     const { parsed, lookup, scriptLang } = opts;
-    this.#filename = parsed.filename;
+    const { api, interop } = getRuntimeAPI(
+      opts.translator,
+      opts.lookup,
+      parsed,
+    );
     this.#code = parsed.code;
+    this.#filename = parsed.filename;
+    this.#api = api;
+    this.#interop = interop;
     this.#scriptLang = scriptLang;
     this.#parsed = parsed;
     this.#lookup = lookup;
     this.#ts = opts.ts;
     this.#runtimeTypes = opts.runtimeTypesCode;
     this.#extractor = new Extractor(parsed);
-    this.#scriptParser = new ScriptParser(parsed);
+    this.#ast = new ScriptParser(parsed);
     this.#read = parsed.read.bind(parsed);
-    this.#api = getRuntimeAPI(opts.translator, parsed);
-    this.#mutationOffsets = crawlProgramScope(this.#parsed, this.#scriptParser);
+    this.#mutations = crawlProgramScope(this.#parsed, this.#ast);
     this.#writeProgram(parsed.program);
   }
 
@@ -148,7 +156,7 @@ class ScriptExtractor {
     this.#writeCommentPragmas(program);
 
     const componentFileName =
-      this.#api !== RuntimeAPI.tags
+      this.#api === RuntimeAPI.class
         ? getComponentFilename(this.#filename)
         : undefined;
     const inputType = this.#getInputType(program);
@@ -261,29 +269,34 @@ class ScriptExtractor {
         );
       } else {
         this.#extractor.write(
-          `/** @typedef {${
-            isExternalComponentFile
-              ? "Component['input']"
-              : "Record<string, unknown>"
-          }} Input */\n`,
+          `/** @typedef {Record<string, unknown>} Input */\n`,
         );
       }
     }
 
-    if (this.#api !== RuntimeAPI.tags) {
+    if (this.#api === RuntimeAPI.class) {
       if (isExternalComponentFile) {
+        const componentImport = `"${stripExt(relativeImportPath(this.#filename, componentFileName))}"`;
         if (this.#scriptLang === ScriptLang.ts) {
-          this.#extractor.write(
-            `import type Component from "${stripExt(
-              relativeImportPath(this.#filename, componentFileName),
-            )}";\n`,
-          );
+          if (typeArgsStr) {
+            this.#extractor.write(
+              `import type Component from ${componentImport};\nexport type { Component };\n`,
+            );
+          } else {
+            this.#extractor.write(
+              `export interface Component extends ${varShared("ResolveComponent")}<typeof import(${componentImport})> {}\n`,
+            );
+          }
         } else {
-          this.#extractor.write(
-            `/** @typedef {import("${stripExt(
-              relativeImportPath(this.#filename, componentFileName),
-            )}") extends infer Component ? Component extends { default: infer Component } ? Component : Component : never} Component */\n`,
-          );
+          if (typeArgsStr) {
+            this.#extractor.write(
+              `/** @import Component from ${componentImport} */\n`,
+            );
+          } else {
+            this.#extractor.write(
+              `/** @typedef {${varShared("ResolveComponent")}<typeof import(${componentImport})>} Component */\n`,
+            );
+          }
         }
       } else {
         const body = componentClassBody || " {}";
@@ -328,48 +341,58 @@ function ${templateName}() {\n`);
 
     this.#extractor.write(`\
   const input = ${this.#getCastedType(`Input${typeArgsStr}`)};${
-    this.#api !== RuntimeAPI.tags
+    this.#api === RuntimeAPI.class
       ? `
   const component = ${this.#getCastedType(`Component${typeArgsStr}`)};
   const state = ${varShared("state")}(component);
-  const out = ${varShared("out")};`
+  const out = ${this.#getCastedType("Marko.Out")};`
       : ""
   }
   const $signal = ${this.#getCastedType("AbortSignal")};
   const $global = ${varShared("getGlobal")}(
     // @ts-expect-error We expect the compiler to error because we are checking if the MarkoRun.Context is defined.
     (${varShared("error")}, ${this.#getCastedType("MarkoRun.Context")})
-  );
-  ${varShared("noop")}({ ${this.#api !== RuntimeAPI.tags ? "component, state, out, " : ""}input, $global, $signal });\n`);
+  );\n`);
 
     const body = this.#processBody(program); // TODO: handle top level attribute tags.
+    const bindings = getProgramBindings(program);
+
+    if (bindings) {
+      for (const name of bindings.all) {
+        this.#extractor.write(
+          `const ${name} = ${varShared("hoist")}(() => ${varLocal(`hoist__${name}`)});\n`,
+        );
+      }
+    }
 
     if (body?.content) {
-      this.#writeChildren(program, body.content);
-    }
-    const hoists = getHoists(program);
+      this.#writeChildren(body.content);
 
-    if (hoists) {
-      this.#extractor.write("const ");
-      this.#writeObjectKeys(hoists);
-      this.#extractor.write(` = ${varShared("readScopes")}({`);
-      for (const child of program.body) {
-        if (child.type === NodeType.Tag) {
-          const renderId = this.#renderIds.get(child);
-          if (renderId !== undefined) {
+      if (bindings) {
+        if (bindings.vars) {
+          for (const name of bindings.vars) {
             this.#extractor.write(
-              `${varLocal("rendered_" + renderId)}${SEP_COMMA_SPACE}`,
+              `var ${varLocal(`hoist__${name}`)} = ${name};\n`,
             );
           }
         }
+
+        if (bindings.hoists) {
+          this.#extractor.write(
+            `var {${bindings.hoists.map((name) => `${name}: ${varLocal(`hoist__${name}`)}`).join(SEP_COMMA_SPACE)}} = ${this.#getBodyHoistScopeExpression(program.body)!};\n`,
+          );
+        }
       }
-      this.#extractor.write(`});\n${varShared("noop")}(`);
-      this.#writeObjectKeys(hoists);
-      this.#extractor.write(");\n");
+
+      this.#endChildren();
     }
 
+    this.#extractor.write(
+      `${varShared("noop")}({ ${bindings ? bindings.all.join(SEP_COMMA_SPACE) + SEP_COMMA_SPACE : ""}${this.#api === RuntimeAPI.class ? "component, state, out, " : ""}input, $global, $signal });\n`,
+    );
+
     if (didReturn) {
-      this.#extractor.write(`return ${varLocal("return")}.return;\n}\n`);
+      this.#extractor.write(`return ${varLocal("return")};\n}\n`);
     } else {
       this.#extractor.write("return;\n})();\n");
     }
@@ -391,6 +414,7 @@ function ${templateName}() {\n`);
     const templateOverrideClass = `${templateBaseClass}<{${
       this.#runtimeTypes
         ? getRuntimeOverrides(
+            this.#api,
             this.#runtimeTypes,
             typeParamsStr,
             typeArgsStr,
@@ -398,7 +422,7 @@ function ${templateName}() {\n`);
           )
         : ""
     }
-  ${this.#api ? `api: "${this.#api}",` : ""}
+  ${this.#interop ? `api: "${this.#api}",` : ""}
   _${
     typeParamsStr
       ? `<${internalApply} = 1>(): ${internalApply} extends 0
@@ -478,19 +502,20 @@ function ${templateName}() {\n`);
 
   #writeReturn(
     returned: Range | string | undefined,
-    localBindings: Repeatable<string>,
+    body: Node.ParentNode["body"],
   ) {
-    if (!returned && !localBindings) {
+    const scopeExpr = this.#getScopeExpression(body);
+    if (!returned && !scopeExpr) {
       this.#extractor.write(`return ${varShared("voidReturn")};\n`);
       return;
     }
 
     this.#extractor.write(`return new (class MarkoReturn<Return = void> {\n`);
 
-    if (localBindings) {
-      this.#extractor.write(`[Marko._.scope] = `);
-      this.#writeObjectKeys(localBindings);
-      this.#extractor.write(`;\n`);
+    if (scopeExpr) {
+      this.#extractor.write(
+        `readonly [${varShared("scope")}] = ${scopeExpr};\n`,
+      );
     }
 
     this.#extractor.write(`declare return: Return;
@@ -501,14 +526,11 @@ constructor(_?: Return) {}
     this.#extractor.write(");\n");
   }
 
-  #writeChildren(
-    parent: Node.ParentNode,
-    children: Node.ChildNode[],
-    skipRenderId = false,
-  ) {
+  #writeChildren(children: Node.ChildNode[], skipRenderId = false) {
     const last = children.length - 1;
     let returnTag: Node.Tag | undefined;
     let i = 0;
+    this.#closeBrackets.push(0);
 
     while (i <= last) {
       const child = children[i++];
@@ -522,19 +544,21 @@ constructor(_?: Return) {}
               // @ts-expect-error we know we are in an If Tag
               declare const child: IfTag;
               const alternates = IF_TAG_ALTERNATES.get(child);
-              let renderId: number | undefined;
+              let didHoist = false;
 
               if (!skipRenderId) {
-                renderId = this.#getRenderId(child);
-                if (!renderId && alternates) {
+                didHoist = hasHoists(child);
+                if (!didHoist && alternates) {
                   for (const { node } of alternates) {
-                    if ((renderId = this.#getRenderId(node))) break;
+                    if ((didHoist = hasHoists(node))) {
+                      break;
+                    }
                   }
                 }
 
-                if (renderId) {
+                if (didHoist) {
                   this.#extractor.write(
-                    `const ${varLocal("rendered_" + renderId)} = (() => {\n`,
+                    `const ${this.#getRenderVar(child, true)} = (() => {\n`,
                   );
                 }
               }
@@ -544,21 +568,21 @@ constructor(_?: Return) {}
                 .write("if (")
                 .copy(
                   this.#getRangeWithoutTrailingComma(child.args?.value) ||
-                    this.#getAttrValue(child, ATTR_UNAMED) ||
+                    this.#getAttrValue(child, ATTR_UNNAMED) ||
                     "undefined",
                 )
                 .write(") {\n");
 
               const ifBody = this.#processBody(child);
               if (ifBody?.content) {
-                const localBindings = getHoistSources(child);
-                this.#writeChildren(child, ifBody.content, true);
+                this.#writeChildren(ifBody.content, true);
 
-                if (localBindings) {
-                  this.#extractor.write("return {\nscope:");
-                  this.#writeObjectKeys(localBindings);
-                  this.#extractor.write("\n};\n");
+                const scopeExpr = this.#getScopeExpression(child.body);
+                if (scopeExpr) {
+                  this.#extractor.write(`return {\nscope: ${scopeExpr}\n};\n`);
                 }
+
+                this.#endChildren();
               }
 
               let needsAlternate = true;
@@ -580,36 +604,36 @@ constructor(_?: Return) {}
 
                   const alternateBody = this.#processBody(node);
                   if (alternateBody?.content) {
-                    const localBindings = getHoistSources(node);
-                    this.#writeChildren(node, alternateBody.content, true);
+                    this.#writeChildren(alternateBody.content, true);
 
-                    if (localBindings) {
-                      this.#extractor.write("return {\nscope:");
-                      this.#writeObjectKeys(localBindings);
-                      this.#extractor.write("\n};\n");
+                    const scopeExpr = this.#getScopeExpression(node.body);
+                    if (scopeExpr) {
+                      this.#extractor.write(
+                        `return {\nscope: ${scopeExpr}\n};\n`,
+                      );
                     }
+
+                    this.#endChildren();
                   }
                 }
               }
 
-              if (needsAlternate && renderId) {
+              if (needsAlternate && didHoist) {
                 this.#extractor.write("\n} else {\nreturn undefined;\n}\n");
               } else {
                 this.#extractor.write("\n}\n");
               }
 
-              if (renderId) {
-                this.#extractor.write("\n})()\n");
+              if (didHoist) {
+                this.#extractor.write("\n})();\n");
               }
 
               break;
             }
             case "for": {
-              const renderId = this.#getRenderId(child);
-
-              if (renderId) {
+              if (hasHoists(child)) {
                 this.#extractor.write(
-                  `const ${varLocal("rendered_" + renderId)} = `,
+                  `const ${this.#getRenderVar(child, true)} = `,
                 );
               }
 
@@ -633,13 +657,14 @@ constructor(_?: Return) {}
               const body = this.#processBody(child);
 
               if (body?.content) {
-                this.#writeChildren(child, body.content);
+                this.#writeChildren(body.content);
               }
 
-              this.#writeReturn(
-                undefined,
-                body?.content ? getHoistSources(child) : undefined,
-              );
+              this.#writeReturn(undefined, body?.content && child.body);
+
+              if (body?.content) {
+                this.#endChildren();
+              }
 
               this.#extractor.write("\n});\n");
 
@@ -659,7 +684,8 @@ constructor(_?: Return) {}
               if (body?.content) {
                 // The while tag is not available in the tags api and
                 // so doesn't need to support hoisted vars or assignments.
-                this.#writeChildren(child, body.content);
+                this.#writeChildren(body.content);
+                this.#endChildren();
               }
 
               this.#extractor.write("\n}\n");
@@ -680,54 +706,12 @@ constructor(_?: Return) {}
       }
     }
 
-    const mutatedVars = getMutatedVars(parent);
-
-    if (returnTag || mutatedVars) {
-      this.#extractor.write(`const ${varLocal("return")} = {\n`);
-
-      if (returnTag) {
-        this.#extractor.write(`return: ${varShared("returnTag")}(`);
-        this.#writeTagInputObject(returnTag);
-        this.#extractor.write(")");
-
-        if (mutatedVars) {
-          this.#extractor.write(",\n");
-        }
-      }
-
-      if (mutatedVars) {
-        this.#extractor.write(`mutate: ${varShared("mutable")}([\n`);
-        for (const binding of mutatedVars) {
-          this.#extractor.write(
-            `${
-              // TODO use a different format to avoid const annotation.
-              this.#scriptLang === ScriptLang.js ? "/** @type {const} */" : ""
-            }[${
-              JSON.stringify(binding.name) +
-              (binding.sourceName && binding.sourceName !== binding.name
-                ? `, ${JSON.stringify(binding.sourceName)}`
-                : "")
-            }, ${varLocal(
-              "rendered_" + this.#getRenderId(binding.node as Node.ParentTag),
-            )}.return${binding.objectPath || ""}]${SEP_COMMA_NEW_LINE}`,
-          );
-        }
-        this.#extractor.write(
-          `]${this.#scriptLang === ScriptLang.ts ? " as const" : ""})`,
-        );
-      }
-
-      this.#extractor.write("\n};\n");
-
-      if (mutatedVars) {
-        // Write out a read of all mutated vars to avoid them being seen
-        // as unread if there are only writes.
-        this.#extractor.write(`${varShared("noop")}({\n`);
-        for (const binding of mutatedVars) {
-          this.#extractor.write(binding.name + SEP_COMMA_NEW_LINE);
-        }
-        this.#extractor.write("});\n");
-      }
+    if (returnTag) {
+      this.#extractor.write(
+        `var ${varLocal("return")} = ${varShared("returnTag")}(`,
+      );
+      this.#writeTagInputObject(returnTag);
+      this.#extractor.write(");\n");
     }
 
     return returnTag !== undefined;
@@ -735,20 +719,22 @@ constructor(_?: Return) {}
 
   #writeTag(tag: Node.Tag) {
     const tagName = tag.nameText;
-    const renderId = this.#getRenderId(tag);
     const def = tagName ? this.#lookup.getTag(tagName) : undefined;
     const importPath = resolveTagImport(this.#filename, def);
     const isHTML = !importPath && def?.html;
-    let tagIdentifier: undefined | string;
+    const needsHoist = hasHoists(tag);
+    const mutatedVars = tag.var && !isHTML && getMutatedVars(tag);
     let isTemplate = false;
+    let renderVar: undefined | string;
+    let templateVar: undefined | string;
 
     if (!def || importPath) {
       const isIdentifier = tagName && REG_TAG_NAME_IDENTIFIER.test(tagName);
       const isMarkoFile = importPath?.endsWith(".marko");
 
       if (isIdentifier || isMarkoFile || !importPath) {
-        tagIdentifier = varLocal("tag_" + this.#ensureTagId(tag));
-        this.#extractor.write(`const ${tagIdentifier} = (\n`);
+        templateVar = this.#getTemplateVar(tag, true);
+        this.#extractor.write(`const ${templateVar} = (\n`);
 
         if (isIdentifier) {
           if (importPath) {
@@ -769,18 +755,38 @@ constructor(_?: Return) {}
 
         this.#extractor.write("\n);\n");
       } else {
-        tagIdentifier = varShared("missingTag");
+        templateVar = varShared("missingTag");
       }
 
       const attrTagTree = this.#getAttrTagTree(tag);
       if (attrTagTree) {
-        this.#writeAttrTagTree(attrTagTree, tagIdentifier);
+        this.#writeAttrTagTree(attrTagTree, templateVar);
         this.#extractor.write(";\n");
       }
     }
 
-    if (renderId) {
-      this.#extractor.write(`const ${varLocal("rendered_" + renderId)} = `);
+    if (needsHoist || tag.var) {
+      renderVar = this.#getRenderVar(tag, true);
+
+      if (tag.var) {
+        this.#closeBrackets[this.#closeBrackets.length - 1]++;
+        this.#extractor.write("{const ");
+
+        if (isHTML) {
+          this.#extractor
+            .copy(tag.var.value)
+            .write(` = ${varShared("el")}(${JSON.stringify(def.name)});\n`);
+        } else {
+          this.#copyWithMutationsReplaced(tag.var.value);
+          this.#extractor.write(
+            ` = ${varShared("returned")}(() => ${renderVar});\n`,
+          );
+        }
+      }
+
+      if (needsHoist || !isHTML) {
+        this.#extractor.write(`const ${renderVar} = `);
+      }
     }
 
     if (isHTML) {
@@ -788,10 +794,12 @@ constructor(_?: Return) {}
         .write(`${varShared("renderNativeTag")}("`)
         .copy(isEmptyRange(tag.name) ? tagName : tag.name)
         .write('")');
-    } else if (tagIdentifier) {
+    } else if (templateVar) {
       this.#extractor.write(
-        `${varShared(isTemplate ? "renderTemplate" : "renderDynamicTag")}(${tagIdentifier})`,
+        `${varShared(isTemplate ? "renderTemplate" : "renderDynamicTag")}(${templateVar}`,
       );
+      this.#writeTagNameComment(tag);
+      this.#extractor.write(")");
     } else {
       this.#extractor.write(varShared("missingTag"));
     }
@@ -803,15 +811,26 @@ constructor(_?: Return) {}
     }
 
     this.#writeTagInputObject(tag);
-
     this.#extractor.write(");\n");
 
-    if (renderId && tag.var) {
-      this.#extractor.write(`const `);
-      this.#copyWithMutationsReplaced(tag.var.value);
-      this.#extractor.write(
-        ` = ${varLocal("rendered_" + renderId)}.return.${ATTR_UNAMED};\n`,
-      );
+    if (mutatedVars) {
+      for (const binding of mutatedVars) {
+        this.#extractor.write(
+          `const ${varLocal(`change__${binding.name}`)} = ${varShared("change")}(${
+            JSON.stringify(binding.name) +
+            (binding.sourceName && binding.sourceName !== binding.name
+              ? `, ${JSON.stringify(binding.sourceName)}`
+              : "")
+          }, ${renderVar}.return${binding.objectPath || ""});\n`,
+        );
+      }
+    }
+  }
+
+  #endChildren() {
+    const pendingBrackets = this.#closeBrackets.pop();
+    if (pendingBrackets) {
+      this.#extractor.write("}".repeat(pendingBrackets));
     }
   }
 
@@ -898,17 +917,17 @@ constructor(_?: Return) {}
           case NodeType.AttrNamed: {
             const isDefault = isEmptyRange(attr.name);
             const value = attr.value;
-            const modifierIndex =
-              !isDefault &&
-              (!value || value.type === NodeType.AttrValue) &&
-              this.#getNamedAttrModifierIndex(attr);
+            const modifier =
+              !value || value.type === NodeType.AttrValue
+                ? this.#getNamedAttrModifier(attr)
+                : undefined;
             // This is printed before the object key so that we can use the
             // position of the default attribute even though there is no actual name in the source.
             const defaultMapPosition = isDefault ? attr.name : undefined;
-            let name: string | Range = isDefault ? ATTR_UNAMED : attr.name;
+            let name: string | Range = isDefault ? ATTR_UNNAMED : attr.name;
 
-            if (modifierIndex !== false) {
-              name = { start: attr.name.start, end: modifierIndex };
+            if (modifier) {
+              name = { start: attr.name.start, end: modifier.start - 1 };
             }
 
             if (value) {
@@ -923,73 +942,102 @@ constructor(_?: Return) {}
                   this.#copyWithMutationsReplaced(value.params);
                   this.#copyWithMutationsReplaced(value.body);
                   break;
-                case NodeType.AttrValue:
+                case NodeType.AttrValue: {
+                  const boundRange = value.bound && getBoundAttrRange(value);
                   this.#extractor
                     .write('"')
                     .copy(defaultMapPosition)
                     .copy(name)
                     .write('": (\n');
-                  if (value.bound) {
-                    const memberExpressionStart =
-                      getBoundAttrMemberExpressionStartOffset(value);
-
-                    if (memberExpressionStart === undefined) {
+                  if (boundRange) {
+                    if (!boundRange.member) {
                       // Should have bound to an identifier, so we inline a function to assign to it.
-                      const valueLiteral = this.#read(value.value);
+                      const valueLiteral = this.#read(boundRange.value);
                       this.#extractor
-                        .copy(value.value)
+                        .copy(boundRange.value)
+                        .write(" ")
+                        .copy(boundRange.types)
                         .write(`\n)${SEP_COMMA_NEW_LINE}"`)
                         .copy(defaultMapPosition)
                         .copy(name)
                         .write(
-                          `Change"(_${valueLiteral}) {\n${
+                          `Change"(\n// @ts-ignore\n_${valueLiteral}\n) {\n${
                             isMutatedVar(tag.parent, valueLiteral)
-                              ? `${varLocal("return")}.mutate.`
+                              ? varLocal(`change__${valueLiteral}.`)
                               : ""
                           }`,
                         )
-                        .copy(value.value)
-                        .write(`= _${valueLiteral};\n}`);
-                    } else if (this.#code[memberExpressionStart] === "[") {
-                      // If we match a `[` was a computed member expression.
+                        .copy(boundRange.value)
+                        .write("= ")
+                        .copy(modifier)
+                        .write(`(_${valueLiteral});\n}`);
+                    } else if (boundRange.member.computed) {
                       // we ensure the string "Change" is appended to the end of the expression.
-                      const memberObjectRange = {
-                        start: value.value.start,
-                        end: memberExpressionStart + 1,
-                      };
-                      const memberPropertyRange = {
-                        start: memberObjectRange.end,
-                        end: value.value.end - 1,
-                      };
-                      const memberPropertyCloseRange = {
-                        start: memberPropertyRange.end,
-                        end: value.value.end,
-                      };
                       this.#extractor
-                        .copy(memberObjectRange)
-                        .copy(memberPropertyRange)
-                        .copy(memberPropertyCloseRange)
+                        .copy(boundRange.value)
+                        .copy({
+                          start: boundRange.value.end,
+                          end: boundRange.value.end + 1,
+                        })
+                        .copy(boundRange.member)
+                        .copy({
+                          start: boundRange.member.end,
+                          end: boundRange.member.end + 1,
+                        })
+                        .copy(boundRange.types)
                         .write(`\n)${SEP_COMMA_NEW_LINE}"`)
                         .copy(defaultMapPosition)
                         .copy(name)
-                        .write('Change": (\n')
-                        .copy(memberObjectRange)
-                        .write("\n`${\n")
-                        .copy(memberPropertyRange)
-                        .write("\n}Change`\n")
-                        .copy(memberPropertyCloseRange)
-                        .write("\n)");
+                        .write('Change": (\n');
+
+                      if (modifier) {
+                        this.#extractor
+                          .copy(boundRange.value)
+                          .write("[`${\n")
+                          .copy(boundRange.member)
+                          .write("\n}Change`] && ((\n// @ts-ignore\n_\n)=>{\n")
+                          .copy(boundRange.value)
+                          .write("[`${\n")
+                          .copy(boundRange.member)
+                          .write("\n}Change`](")
+                          .copy(modifier)
+                          .write("(_));\n})");
+                      } else {
+                        this.#extractor
+                          .copy(boundRange.value)
+                          .write("[`${\n")
+                          .copy(boundRange.member)
+                          .write("\n}Change`]");
+                      }
+
+                      this.#extractor.write(")");
                     } else {
+                      const memberRange = {
+                        start: boundRange.value.start,
+                        end: boundRange.member.end,
+                      };
                       // If we match here then we bound to a static member expression.
                       this.#extractor
-                        .copy(value.value)
+                        .copy(memberRange)
+                        .copy(boundRange.types)
                         .write(`\n)${SEP_COMMA_NEW_LINE}"`)
                         .copy(defaultMapPosition)
                         .copy(name)
-                        .write('Change"')
-                        .write(": ")
-                        .copy(value.value)
-                        .write(`Change`);
+                        .write('Change": (\n');
+
+                      if (modifier) {
+                        this.#extractor
+                          .copy(memberRange)
+                          .write("Change && ((\n// @ts-ignore\n_\n)=>{\n")
+                          .copy(memberRange)
+                          .write("Change(")
+                          .copy(modifier)
+                          .write("(_));\n})");
+                      } else {
+                        this.#extractor.copy(memberRange).write("Change");
+                      }
+
+                      this.#extractor.write(")");
                     }
                   } else {
                     this.#copyWithMutationsReplaced(value.value);
@@ -997,12 +1045,13 @@ constructor(_?: Return) {}
                   }
 
                   break;
+                }
               }
             } else if (attr.args) {
               this.#extractor.write('"').copy(name).write('": ');
 
               if (
-                this.#api !== RuntimeAPI.tags &&
+                this.#api === RuntimeAPI.class &&
                 typeof name !== "string" &&
                 this.#read(name).startsWith("on")
               ) {
@@ -1020,10 +1069,10 @@ constructor(_?: Return) {}
                   );
 
                   if (isValidProperty) {
-                    const propertNameStart = stringLiteralStart + 1;
+                    const propertyNameStart = stringLiteralStart + 1;
                     this.#extractor.write("component.").copy({
-                      start: propertNameStart,
-                      end: propertNameStart + stringLiteralValue.length,
+                      start: propertyNameStart,
+                      end: propertyNameStart + stringLiteralValue.length,
                     });
                   } else {
                     this.#extractor
@@ -1060,9 +1109,7 @@ constructor(_?: Return) {}
                 .copy(defaultMapPosition)
                 .write('"')
                 .copy(name)
-                .write('"')
-                .write(": ")
-                .write(modifierIndex === false ? "true" : '""');
+                .write(`": ${modifier ? '""' : "true"}`);
             }
             break;
           }
@@ -1087,7 +1134,10 @@ constructor(_?: Return) {}
     return hasAttrs;
   }
 
-  #writeAttrTags({ staticAttrTags, dynamicAttrTagParents }: ProcessedBody) {
+  #writeAttrTags(
+    { staticAttrTags, dynamicAttrTagParents }: ProcessedBody,
+    constraintExpr?: string,
+  ) {
     let wasMerge = false;
 
     if (dynamicAttrTagParents) {
@@ -1109,7 +1159,7 @@ constructor(_?: Return) {}
     }
 
     if (dynamicAttrTagParents) {
-      this.#writeDynamicAttrTagParents(dynamicAttrTagParents);
+      this.#writeDynamicAttrTagParents(dynamicAttrTagParents, constraintExpr);
       if (wasMerge) this.#extractor.write(`)${SEP_COMMA_NEW_LINE}`);
     }
   }
@@ -1128,35 +1178,31 @@ constructor(_?: Return) {}
       this.#extractor.write("]: ");
 
       if (isRepeated) {
-        const tagId = this.#tagIds.get(firstAttrTag.owner!);
-        if (tagId) {
-          let accessor = `"${name}"`;
-          let curTag = firstAttrTag.parent;
-          while (curTag) {
-            if (curTag.type === NodeType.AttrTag) {
-              accessor = `"${this.#getAttrTagName(curTag)}",${accessor}`;
-            } else if (!isControlFlowTag(curTag)) {
-              break;
-            }
-
-            curTag = curTag.parent as Node.ParentTag;
-          }
-
+        const templateVar = this.#getTemplateVar(firstAttrTag.owner!);
+        if (templateVar) {
           this.#extractor.write(
-            `${varShared("attrTagFor")}(${varLocal("tag_" + tagId)},${accessor})([`,
+            `${varShared("attrTagFor")}(${templateVar},${this.#getAttrTagPath(firstAttrTag)})(`,
           );
         } else {
-          this.#extractor.write(`${varShared("attrTag")}([`);
+          this.#extractor.write(`${varShared("attrTag")}(`);
         }
-      }
 
-      for (const childNode of attrTag) {
-        this.#writeTagInputObject(childNode);
-        this.#extractor.write(SEP_COMMA_NEW_LINE);
-      }
+        this.#extractor.write(`"${name}",`);
 
-      if (isRepeated) {
-        this.#extractor.write(`])${SEP_COMMA_NEW_LINE}`);
+        for (const childNode of attrTag) {
+          this.#extractor.write(`{["${name}"`);
+          this.#writeTagNameComment(childNode);
+          this.#extractor.write("]: ");
+          this.#writeTagInputObject(childNode);
+          this.#extractor.write(`}${SEP_COMMA_NEW_LINE}`);
+        }
+
+        this.#extractor.write(`)${SEP_COMMA_NEW_LINE}`);
+      } else {
+        for (const childNode of attrTag) {
+          this.#writeTagInputObject(childNode);
+          this.#extractor.write(SEP_COMMA_NEW_LINE);
+        }
       }
     }
   }
@@ -1166,6 +1212,7 @@ constructor(_?: Return) {}
       ProcessedBody["dynamicAttrTagParents"],
       undefined
     >,
+    constraintExpr?: string,
   ) {
     for (const tag of dynamicAttrTagParents) {
       switch (tag.nameText) {
@@ -1178,7 +1225,7 @@ constructor(_?: Return) {}
             .write("((\n")
             .copy(
               this.#getRangeWithoutTrailingComma(tag.args?.value) ||
-                this.#getAttrValue(tag, ATTR_UNAMED) ||
+                this.#getAttrValue(tag, ATTR_UNNAMED) ||
                 "undefined",
             )
             .write("\n) ? ");
@@ -1222,8 +1269,12 @@ constructor(_?: Return) {}
             .write("(\n")
             .copy(tag.params?.value)
             .write("\n) => (");
-          this.#writeDynamicAttrTagBody(tag);
-          this.#extractor.write("))");
+          this.#writeDynamicAttrTagBody(tag, constraintExpr);
+          this.#extractor.write(")");
+          if (constraintExpr) {
+            this.#extractor.write(`,${constraintExpr}`);
+          }
+          this.#extractor.write(")");
           break;
         }
         case "while": {
@@ -1254,7 +1305,7 @@ constructor(_?: Return) {}
 
     if (
       tag.args &&
-      (this.#api !== RuntimeAPI.class || !!this.#getDynamicTagExpression(tag))
+      (this.#api === RuntimeAPI.tags || !!this.#getDynamicTagExpression(tag))
     ) {
       hasInput = true;
       this.#extractor.copy(tag.args.value);
@@ -1295,7 +1346,9 @@ constructor(_?: Return) {}
     let hasBodyContent = false;
 
     if (isScript) {
-      this.#extractor.write("async value(){");
+      this.#extractor.write(
+        `async ${this.#api === RuntimeAPI.tags ? "value" : `[${varShared("never")}]`}(){`,
+      );
       this.#copyWithMutationsReplaced({
         start: tag.body[0].start,
         end: tag.body[tag.body.length - 1].end,
@@ -1303,7 +1356,7 @@ constructor(_?: Return) {}
       this.#extractor.write(`}${SEP_COMMA_NEW_LINE}`);
     } else if (body) {
       hasInput = true;
-      this.#writeAttrTags(body);
+      this.#writeAttrTags(body, this.#getTagInputType(tag));
       hasBodyContent = body.content !== undefined;
     } else if (tag.close) {
       hasBodyContent = true;
@@ -1312,27 +1365,17 @@ constructor(_?: Return) {}
     if (tag.params || hasBodyContent) {
       this.#extractor.write("[");
 
-      switch (this.#api) {
-        case RuntimeAPI.tags:
-          this.#extractor.write('"content"');
-          break;
-        case RuntimeAPI.class:
-          this.#extractor.write('"renderBody"');
-          break;
-        default: {
-          const tagId = this.#tagIds.get(
-            tag.type === NodeType.AttrTag ? tag.owner! : tag,
-          );
-
-          if (tagId) {
-            this.#extractor.write(
-              `${varShared("contentFor")}(${varLocal("tag_" + tagId)})`,
-            );
-          } else {
-            this.#extractor.write(varShared("content"));
-          }
-          break;
+      if (this.#interop) {
+        const templateVar = this.#getTemplateVar(
+          tag.type === NodeType.AttrTag ? tag.owner! : tag,
+        );
+        if (templateVar) {
+          this.#extractor.write(`${varShared("contentFor")}(${templateVar})`);
+        } else {
+          this.#extractor.write(varShared("content"));
         }
+      } else {
+        this.#extractor.write('"content"');
       }
 
       // Adds a comment containing the tag name inside the body content key
@@ -1354,17 +1397,18 @@ constructor(_?: Return) {}
       let didReturn = false;
 
       if (body?.content) {
-        didReturn = this.#writeChildren(tag, body.content);
+        didReturn = this.#writeChildren(body.content);
       }
 
       if (!tag.params) {
         this.#extractor.write(`return () => {\n`);
       }
 
-      this.#writeReturn(
-        didReturn ? `${varLocal("return")}.return` : undefined,
-        getHoistSources(tag),
-      );
+      this.#writeReturn(didReturn ? varLocal("return") : undefined, tag.body);
+
+      if (body?.content) {
+        this.#endChildren();
+      }
 
       if (tag.params) {
         this.#extractor.write("})");
@@ -1391,16 +1435,6 @@ constructor(_?: Return) {}
     }
   }
 
-  #writeObjectKeys(keys: Iterable<string>) {
-    this.#extractor.write("{");
-
-    for (const key of keys) {
-      this.#extractor.write(key + SEP_COMMA_SPACE);
-    }
-
-    this.#extractor.write("}");
-  }
-
   #getCastedType(type: string) {
     return this.#scriptLang === ScriptLang.ts
       ? `${varShared("any")} as ${type}`
@@ -1408,7 +1442,7 @@ constructor(_?: Return) {}
   }
 
   #copyWithMutationsReplaced(range: Range) {
-    const mutations = this.#mutationOffsets;
+    const mutations = this.#mutations;
     if (!mutations) return this.#extractor.copy(range);
 
     const len = mutations.length;
@@ -1423,16 +1457,15 @@ constructor(_?: Return) {}
       while (minIndex < maxIndex) {
         const midIndex = (minIndex + maxIndex) >>> 1;
 
-        if (mutations[midIndex] >= curOffset) {
+        if (mutations[midIndex].start >= curOffset) {
           maxIndex = midIndex;
         } else {
           minIndex = midIndex + 1;
         }
       }
 
-      const nextOffset = maxIndex === len ? range.end : mutations[maxIndex];
-
-      if (nextOffset >= range.end) {
+      const mutation = maxIndex !== len && mutations[maxIndex];
+      if (!mutation || mutation.start >= range.end) {
         // We didn't find any more mutations.
         this.#extractor.copy({
           start: curOffset,
@@ -1442,11 +1475,11 @@ constructor(_?: Return) {}
       }
 
       // Copy the content before the mutation.
-      this.#extractor.copy({ start: curOffset, end: nextOffset });
+      this.#extractor.copy({ start: curOffset, end: mutation.start });
       // splice in mutation prefix.
-      this.#extractor.write(`${varLocal("return")}.mutate.`);
+      this.#extractor.write(`${varLocal(`change__${mutation.binding.name}`)}.`);
 
-      curOffset = nextOffset;
+      curOffset = mutation.start;
       minIndex = maxIndex + 1;
       // eslint-disable-next-line no-constant-condition
     } while (true);
@@ -1534,7 +1567,7 @@ constructor(_?: Return) {}
                           condition:
                             this.#getRangeWithoutTrailingComma(
                               nextChild.args?.value,
-                            ) || this.#getAttrValue(nextChild, ATTR_UNAMED),
+                            ) || this.#getAttrValue(nextChild, ATTR_UNNAMED),
                           node: nextChild as IfTagAlternate["node"],
                         };
 
@@ -1625,19 +1658,20 @@ constructor(_?: Return) {}
     }
   }
 
-  #writeDynamicAttrTagBody(tag: Node.ControlFlowTag) {
+  #writeDynamicAttrTagBody(tag: Node.ControlFlowTag, constraintExpr?: string) {
     const body = this.#processBody(tag);
     if (body) {
       if (body.content) {
         this.#extractor.write("(() => {\n");
-        this.#writeChildren(tag, body.content);
+        this.#writeChildren(body.content);
         this.#extractor.write("return ");
       }
       this.#extractor.write("{\n");
-      this.#writeAttrTags(body);
+      this.#writeAttrTags(body, constraintExpr);
       this.#extractor.write("}");
 
       if (body.content) {
+        this.#endChildren();
         this.#extractor.write(";\n})()");
       }
     } else {
@@ -1650,7 +1684,7 @@ constructor(_?: Return) {}
       for (const attr of tag.attrs) {
         if (
           isValueAttribute(attr) &&
-          (this.#read(attr.name) || ATTR_UNAMED) === name
+          (this.#read(attr.name) || ATTR_UNNAMED) === name
         ) {
           return attr.value.value;
         }
@@ -1702,11 +1736,15 @@ constructor(_?: Return) {}
   #getTSInputType(program: Node.Program) {
     for (const node of program.static) {
       if (node.type === NodeType.Export) {
-        const start = node.start + "export ".length;
-        if (this.#testAtIndex(REG_INPUT_TYPE, start)) {
-          const [inputType] = this.#scriptParser.statementAt<
-            t.TSInterfaceDeclaration | t.TSTypeAliasDeclaration
-          >(start, this.#read({ start, end: node.end }));
+        if (this.#testAtIndex(REG_INPUT_TYPE, node.start + "export ".length)) {
+          const exported = this.#ast.export(node) as
+            | undefined
+            | t.ExportNamedDeclaration;
+          const inputType = exported?.declaration as
+            | t.TSInterfaceDeclaration
+            | t.TSTypeAliasDeclaration
+            | null
+            | undefined;
 
           return {
             typeParameters: inputType?.typeParameters?.params.map((param) => {
@@ -1769,35 +1807,78 @@ constructor(_?: Return) {}
     }
   }
 
-  #getRenderId(tag: Node.ParentTag) {
-    let renderId = this.#renderIds.get(tag);
-    if ((renderId === undefined && tag.var) || hasHoists(tag)) {
-      renderId = this.#renderId++;
-      this.#renderIds.set(tag, renderId);
+  #getRenderVar(tag: Node.Tag, declared: true): string;
+  #getRenderVar(tag: Node.Tag): string | undefined;
+  #getRenderVar(tag: Node.Tag, declared = false) {
+    let id = RENDER_VAR.get(tag);
+    if (!id && declared) {
+      RENDER_VAR.set(tag, (id = varLocal("rendered_" + this.#getTagId(tag))));
     }
 
-    return renderId;
+    return id;
   }
 
-  #ensureTagId(tag: Node.ParentTag) {
-    // Reuses ids from renderId but unconditional.
-    let tagId = this.#tagIds.get(tag);
-    if (!tagId) {
-      tagId = this.#tagId++;
-      this.#tagIds.set(tag, tagId);
+  #getTemplateVar(tag: Node.Tag, declared: true): string;
+  #getTemplateVar(tag: Node.Tag): string | undefined;
+  #getTemplateVar(tag: Node.Tag, declared = false) {
+    let id = TEMPLATE_VAR.get(tag);
+    if (!id && declared) {
+      TEMPLATE_VAR.set(tag, (id = varLocal("tag_" + this.#getTagId(tag))));
     }
 
-    return tagId;
+    return id;
   }
 
-  #getNamedAttrModifierIndex(attr: Node.AttrNamed) {
-    const start = attr.name.start + 1;
-    const end = attr.name.end - 1;
-    for (let i = end; i-- > start; ) {
-      if (this.#code.charAt(i) === ":") return i;
+  #getTagId(tag: Node.Tag) {
+    let id = TAG_ID.get(tag);
+    if (id === undefined) {
+      id = this.#tagId++;
+      TAG_ID.set(tag, id);
     }
 
-    return false;
+    return id;
+  }
+
+  #getScopeExpression(body: Node.ParentNode["body"]) {
+    const sources = getHoistSources(body);
+    const hoists = this.#getBodyHoistScopeExpression(body);
+    return sources
+      ? `{ ${hoists ? `...${hoists}, ` : ""}${sources.join(SEP_COMMA_SPACE)} }`
+      : hoists;
+  }
+
+  #getBodyHoistScopeExpression(body: Node.ParentNode["body"]) {
+    let hoistVars: Repeated<string> | undefined;
+    if (body) {
+      for (const child of body) {
+        if (child.type === NodeType.Tag) {
+          const renderVar = this.#getRenderVar(child);
+          if (renderVar && (!child.var || hasHoists(child))) {
+            if (hoistVars) {
+              hoistVars.push(renderVar);
+            } else {
+              hoistVars = [renderVar];
+            }
+          }
+        }
+      }
+    }
+
+    if (hoistVars) {
+      if (hoistVars.length === 1) {
+        return `${varShared("readScope")}(${hoistVars[0]})`;
+      }
+
+      return `${varShared("readScopes")}({ ${hoistVars.join(SEP_COMMA_SPACE)} })`;
+    }
+  }
+
+  #getNamedAttrModifier(attr: Node.AttrNamed) {
+    const start = attr.name.start;
+    const end = attr.name.end;
+    for (let i = end - 1; i-- > start; ) {
+      if (this.#code.charAt(i) === ":") return { start: i + 1, end };
+    }
   }
 
   #getAttrTagName(tag: Node.AttrTag) {
@@ -1806,6 +1887,33 @@ constructor(_?: Return) {}
       this.#lookup.getTag(nameText)?.targetProperty ||
       nameText.slice(nameText.lastIndexOf(":") + 1)
     );
+  }
+
+  #getAttrTagPath(tag: Node.AttrTag): string {
+    let path = `"${this.#getAttrTagName(tag)}"`;
+    let curTag = tag.parent;
+    while (curTag) {
+      if (curTag.type === NodeType.AttrTag) {
+        path = `"${this.#getAttrTagName(curTag)}",${path}`;
+      } else if (!isControlFlowTag(curTag as Node.Tag)) {
+        break;
+      }
+      curTag = curTag.parent as Node.ParentTag;
+    }
+    return path;
+  }
+
+  #getTagInputType(tag: Node.ParentTag): string | undefined {
+    if (tag.type === NodeType.AttrTag) {
+      if (!tag.owner) return;
+      const templateVar = this.#getTemplateVar(tag.owner);
+      if (!templateVar) return;
+      return `${varShared("inputForAttr")}(${templateVar},${this.#getAttrTagPath(tag)})`;
+    }
+
+    const templateVar = this.#getTemplateVar(tag);
+    if (!templateVar) return;
+    return `${varShared("input")}(${templateVar})`;
   }
 
   #writeAttrTagTree(tree: AttrTagTree, valueExpression: string, nested?: true) {
@@ -1873,6 +1981,7 @@ const enum ForTagType {
   of,
   in,
   to,
+  until,
 }
 function getForTagType(parsed: Parsed, tag: Node.Tag) {
   if (tag.attrs) {
@@ -1887,9 +1996,9 @@ function getForTagType(parsed: Parsed, tag: Node.Tag) {
         case "in":
           return ForTagType.in;
         case "to":
-        case "from":
-        case "step":
           return ForTagType.to;
+        case "until":
+          return ForTagType.until;
       }
     }
   }
@@ -1905,6 +2014,8 @@ function getForTagRuntime(parsed: Parsed, tag: Node.Tag) {
       return "forInTag";
     case ForTagType.to:
       return "forToTag";
+    case ForTagType.until:
+      return "forUntilTag";
     default:
       return "forTag";
   }
@@ -1918,6 +2029,8 @@ function getForAttrTagRuntime(parsed: Parsed, tag: Node.Tag) {
       return "forInAttrTag";
     case ForTagType.to:
       return "forToAttrTag";
+    case ForTagType.until:
+      return "forUntilAttrTag";
     default:
       return "forAttrTag";
   }

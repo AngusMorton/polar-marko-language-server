@@ -168,7 +168,7 @@ export default {
             isExportComponentType(statement) || // skips the generated `export { type Component }`.
             isImportComponentType(statement) || // skips the generated `import type Component from "..."`.
             isExportEmptyInputType(statement) || // skips empty exported Input, eg `export type Input = {}` or `export interface Input {}`.
-            isExportInputTypeAsComponentInput(statement) || // skips outputing `export type Input = Component["input"]` since it's inferred.
+            isExportInputTypeAsComponentInput(statement) || // skips outputting `export type Input = Component["input"]` since it's inferred.
             (defaultExportId && // If the `export default` was an identifier, we also remove the variable that declared the identifier.
               isVariableStatementForName(statement, defaultExportId))
           ) {
@@ -293,14 +293,19 @@ export default {
     }
 
     function isExportComponentType(statement: ts.Statement) {
-      return (
-        ts.isExportDeclaration(statement) &&
-        statement.exportClause &&
-        ts.isNamedExports(statement.exportClause) &&
-        statement.exportClause.elements.length === 1 &&
-        ts.isIdentifier(statement.exportClause.elements[0].name) &&
-        statement.exportClause.elements[0].name.escapedText === "Component"
-      );
+      if (ts.isExportDeclaration(statement)) {
+        return (
+          statement.exportClause &&
+          ts.isNamedExports(statement.exportClause) &&
+          statement.exportClause.elements.length === 1 &&
+          ts.isIdentifier(statement.exportClause.elements[0].name) &&
+          statement.exportClause.elements[0].name.escapedText === "Component"
+        );
+      } else if (ts.isTypeAliasDeclaration(statement)) {
+        return statement.name.text === "Component";
+      }
+
+      return false;
     }
 
     function isVariableStatementForName(statement: ts.Statement, name: string) {

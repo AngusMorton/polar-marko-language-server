@@ -1,14 +1,14 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "../../tsconfig.base.json",
   "include": ["src/**/*"],
-  "exclude": ["**/__tests__", "**/dist"],
+  "exclude": ["**/__tests__"],
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "references": [
-    { "path": "../language-server-volar" },
+    { "path": "../volar-language-server" },
     { "path": "../language-tools" }
   ]
 }

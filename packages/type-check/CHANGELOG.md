@@ -1,5 +1,285 @@
 # @marko/type-check
 
+## 3.0.0
+
+### Major Changes
+
+- [#480](https://github.com/marko-js/language-server/pull/480) [`9b1bc18`](https://github.com/marko-js/language-server/commit/9b1bc18f9f29927f5e503f75d539a40b504b5a9a) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Upgrade to typescript 6.
+
+## 2.1.30
+
+### Patch Changes
+
+- [#474](https://github.com/marko-js/language-server/pull/474) [`f988d10`](https://github.com/marko-js/language-server/commit/f988d10b6940ca8b85c2b535d71f258d9d5a4609) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Improve dynamic attribute tag typings.
+
+- [#472](https://github.com/marko-js/language-server/pull/472) [`df74e9c`](https://github.com/marko-js/language-server/commit/df74e9c6d9abb7407311e33717191243667585a1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Refactor language tooling around script parsing and scope tracking to allow for caching.
+
+- Updated dependencies [[`f988d10`](https://github.com/marko-js/language-server/commit/f988d10b6940ca8b85c2b535d71f258d9d5a4609), [`df74e9c`](https://github.com/marko-js/language-server/commit/df74e9c6d9abb7407311e33717191243667585a1)]:
+  - @marko/language-tools@2.5.58
+
+## 2.1.29
+
+### Patch Changes
+
+- [#468](https://github.com/marko-js/language-server/pull/468) [`2572019`](https://github.com/marko-js/language-server/commit/2572019c8a89c606a4504cd5a43dbdf02fe6995a) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Support bound attribute modifier syntax.
+
+- Updated dependencies [[`2572019`](https://github.com/marko-js/language-server/commit/2572019c8a89c606a4504cd5a43dbdf02fe6995a)]:
+  - @marko/language-tools@2.5.57
+
+## 2.1.28
+
+### Patch Changes
+
+- [#465](https://github.com/marko-js/language-server/pull/465) [`d3aa173`](https://github.com/marko-js/language-server/commit/d3aa1733f4fa4263efc822efc1d0b611041893da) Thanks [@LuLaValva](https://github.com/LuLaValva)! - Bound values with types
+
+- Updated dependencies [[`d3aa173`](https://github.com/marko-js/language-server/commit/d3aa1733f4fa4263efc822efc1d0b611041893da)]:
+  - @marko/language-tools@2.5.56
+
+## 2.1.27
+
+### Patch Changes
+
+- [#460](https://github.com/marko-js/language-server/pull/460) [`0072196`](https://github.com/marko-js/language-server/commit/0072196d58e1fc414212c9f719547d039adc1fae) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Upgrade marko, remove babel references.
+
+- Updated dependencies [[`0072196`](https://github.com/marko-js/language-server/commit/0072196d58e1fc414212c9f719547d039adc1fae)]:
+  - @marko/language-tools@2.5.55
+
+## 2.1.26
+
+### Patch Changes
+
+- [#458](https://github.com/marko-js/language-server/pull/458) [`c5d7722`](https://github.com/marko-js/language-server/commit/c5d77221bd4b2bd7de40b3fa6bf358e134f45642) Thanks [@LuLaValva](https://github.com/LuLaValva)! - Type narrowing fix for attribute tags
+
+- Updated dependencies [[`c5d7722`](https://github.com/marko-js/language-server/commit/c5d77221bd4b2bd7de40b3fa6bf358e134f45642)]:
+  - @marko/language-tools@2.5.54
+
+## 2.1.25
+
+### Patch Changes
+
+- [#456](https://github.com/marko-js/language-server/pull/456) [`0750620`](https://github.com/marko-js/language-server/commit/0750620d26299d6e765aea3bb9d2838d3c2a6bda) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix issue with outputting unnecessary const for native tag codegen.
+
+- Updated dependencies [[`0750620`](https://github.com/marko-js/language-server/commit/0750620d26299d6e765aea3bb9d2838d3c2a6bda)]:
+  - @marko/language-tools@2.5.53
+
+## 2.1.24
+
+### Patch Changes
+
+- [#454](https://github.com/marko-js/language-server/pull/454) [`8a76656`](https://github.com/marko-js/language-server/commit/8a766561410e88f472f981aae162218ffd26dae2) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Align reading own tag variables within body content with the Marko 6 runtime. (Fixes a regression with recursive define tag types).
+
+- Updated dependencies [[`8a76656`](https://github.com/marko-js/language-server/commit/8a766561410e88f472f981aae162218ffd26dae2)]:
+  - @marko/language-tools@2.5.52
+
+## 2.1.23
+
+### Patch Changes
+
+- [#452](https://github.com/marko-js/language-server/pull/452) [`14a5679`](https://github.com/marko-js/language-server/commit/14a5679365cff2918eb6828c567dcea562261e51) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Ensure render level errors map back to tag names.
+
+- Updated dependencies [[`14a5679`](https://github.com/marko-js/language-server/commit/14a5679365cff2918eb6828c567dcea562261e51)]:
+  - @marko/language-tools@2.5.51
+
+## 2.1.22
+
+### Patch Changes
+
+- [#448](https://github.com/marko-js/language-server/pull/448) [`d90cea6`](https://github.com/marko-js/language-server/commit/d90cea6f268ad5af7e8157b2c83e6a73910e7650) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix define tag tag var hoisting and other type issues.
+
+- Updated dependencies [[`d90cea6`](https://github.com/marko-js/language-server/commit/d90cea6f268ad5af7e8157b2c83e6a73910e7650)]:
+  - @marko/language-tools@2.5.50
+
+## 2.1.21
+
+### Patch Changes
+
+- [`a857d7f`](https://github.com/marko-js/language-server/commit/a857d7fe5a4e98e14e5ee23004364480c2a1a24f) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix attr tag typing when tag has any type.
+
+- Updated dependencies [[`a857d7f`](https://github.com/marko-js/language-server/commit/a857d7fe5a4e98e14e5ee23004364480c2a1a24f)]:
+  - @marko/language-tools@2.5.49
+
+## 2.1.20
+
+### Patch Changes
+
+- [#444](https://github.com/marko-js/language-server/pull/444) [`2337baa`](https://github.com/marko-js/language-server/commit/2337baa2d1e15e3c85e9f07025c746d6d4f16a73) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Improve attr tag types.
+
+- Updated dependencies [[`2337baa`](https://github.com/marko-js/language-server/commit/2337baa2d1e15e3c85e9f07025c746d6d4f16a73)]:
+  - @marko/language-tools@2.5.48
+
+## 2.1.19
+
+### Patch Changes
+
+- [#442](https://github.com/marko-js/language-server/pull/442) [`38f9374`](https://github.com/marko-js/language-server/commit/38f937470c8bd2f4aacfc0b62c3ecc549d9eb40f) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Hoist types from control flow now do not cause the return type of the hoist to be undefined.
+
+- [#442](https://github.com/marko-js/language-server/pull/442) [`38f9374`](https://github.com/marko-js/language-server/commit/38f937470c8bd2f4aacfc0b62c3ecc549d9eb40f) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Align hoist types to match latest Marko 6.
+
+- Updated dependencies [[`38f9374`](https://github.com/marko-js/language-server/commit/38f937470c8bd2f4aacfc0b62c3ecc549d9eb40f), [`38f9374`](https://github.com/marko-js/language-server/commit/38f937470c8bd2f4aacfc0b62c3ecc549d9eb40f)]:
+  - @marko/language-tools@2.5.47
+
+## 2.1.18
+
+### Patch Changes
+
+- [#439](https://github.com/marko-js/language-server/pull/439) [`7ac4f33`](https://github.com/marko-js/language-server/commit/7ac4f3326d57a783b88ecd2230b08d17380d648f) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix issue with identifier bound attributes in a nested scope.
+
+- Updated dependencies [[`7ac4f33`](https://github.com/marko-js/language-server/commit/7ac4f3326d57a783b88ecd2230b08d17380d648f)]:
+  - @marko/language-tools@2.5.46
+
+## 2.1.17
+
+### Patch Changes
+
+- [#437](https://github.com/marko-js/language-server/pull/437) [`de8c189`](https://github.com/marko-js/language-server/commit/de8c189f75e1a8b3f9b271872730b56061890a8d) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Improve tag var mutation codegen to be separate from scope handling which fixes an issue where some tags change handlers were not being output.
+
+- [#437](https://github.com/marko-js/language-server/pull/437) [`91da58b`](https://github.com/marko-js/language-server/commit/91da58b17cbe0ce95dc169985060be2153c5cab4) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Optimize native tag var codegen.
+
+- Updated dependencies [[`de8c189`](https://github.com/marko-js/language-server/commit/de8c189f75e1a8b3f9b271872730b56061890a8d), [`91da58b`](https://github.com/marko-js/language-server/commit/91da58b17cbe0ce95dc169985060be2153c5cab4)]:
+  - @marko/language-tools@2.5.45
+
+## 2.1.16
+
+### Patch Changes
+
+- [#435](https://github.com/marko-js/language-server/pull/435) [`4ed10bd`](https://github.com/marko-js/language-server/commit/4ed10bdf53ba01540577ab5017520784fbcc04d5) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Avoid using Marko.Out as a type unless class api.
+
+- [#435](https://github.com/marko-js/language-server/pull/435) [`4ed10bd`](https://github.com/marko-js/language-server/commit/4ed10bdf53ba01540577ab5017520784fbcc04d5) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Improve scope hoisting types.
+
+- [#435](https://github.com/marko-js/language-server/pull/435) [`26be418`](https://github.com/marko-js/language-server/commit/26be418cf6775ed17e3cf6166416f66c1b514ed2) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Ignore change handler param types when defined as non function.
+
+- Updated dependencies [[`4ed10bd`](https://github.com/marko-js/language-server/commit/4ed10bdf53ba01540577ab5017520784fbcc04d5), [`4ed10bd`](https://github.com/marko-js/language-server/commit/4ed10bdf53ba01540577ab5017520784fbcc04d5), [`26be418`](https://github.com/marko-js/language-server/commit/26be418cf6775ed17e3cf6166416f66c1b514ed2)]:
+  - @marko/language-tools@2.5.44
+
+## 2.1.15
+
+### Patch Changes
+
+- [#433](https://github.com/marko-js/language-server/pull/433) [`9ba6f1c`](https://github.com/marko-js/language-server/commit/9ba6f1cc0baed5a27489e4927ee0c4a1ae4bf8e4) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Align hoisted tag variable types with marko 6 runtime.
+
+- Updated dependencies [[`9ba6f1c`](https://github.com/marko-js/language-server/commit/9ba6f1cc0baed5a27489e4927ee0c4a1ae4bf8e4)]:
+  - @marko/language-tools@2.5.43
+
+## 2.1.14
+
+### Patch Changes
+
+- [#431](https://github.com/marko-js/language-server/pull/431) [`b47d633`](https://github.com/marko-js/language-server/commit/b47d63314b8e627cd9bebed459e00a94c93a9327) Thanks [@LuLaValva](https://github.com/LuLaValva)! - pnpm support when @marko/compiler is a transitive dependency
+
+- Updated dependencies [[`b47d633`](https://github.com/marko-js/language-server/commit/b47d63314b8e627cd9bebed459e00a94c93a9327)]:
+  - @marko/language-tools@2.5.42
+
+## 2.1.13
+
+### Patch Changes
+
+- [#425](https://github.com/marko-js/language-server/pull/425) [`6c4cbda`](https://github.com/marko-js/language-server/commit/6c4cbda7d170f7f9880c8be4ec22062ad6c85ac8) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Improve tags api interop support.
+
+- Updated dependencies [[`6c4cbda`](https://github.com/marko-js/language-server/commit/6c4cbda7d170f7f9880c8be4ec22062ad6c85ac8)]:
+  - @marko/language-tools@2.5.41
+
+## 2.1.12
+
+### Patch Changes
+
+- [#423](https://github.com/marko-js/language-server/pull/423) [`7f173d6`](https://github.com/marko-js/language-server/commit/7f173d6dc9369f7e2e9fed73500de10bf614e3ae) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Relax restrictions on rendering unknown templates.
+
+- [#423](https://github.com/marko-js/language-server/pull/423) [`7f173d6`](https://github.com/marko-js/language-server/commit/7f173d6dc9369f7e2e9fed73500de10bf614e3ae) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Only type check script tag body when in tags api.
+
+- Updated dependencies [[`7f173d6`](https://github.com/marko-js/language-server/commit/7f173d6dc9369f7e2e9fed73500de10bf614e3ae), [`7f173d6`](https://github.com/marko-js/language-server/commit/7f173d6dc9369f7e2e9fed73500de10bf614e3ae)]:
+  - @marko/language-tools@2.5.40
+
+## 2.1.11
+
+### Patch Changes
+
+- [#421](https://github.com/marko-js/language-server/pull/421) [`f201739`](https://github.com/marko-js/language-server/commit/f201739f703c8c3f314d6a2cdf3f1f1aa4471866) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix issue with generics applied to external component files.
+
+- Updated dependencies [[`f201739`](https://github.com/marko-js/language-server/commit/f201739f703c8c3f314d6a2cdf3f1f1aa4471866)]:
+  - @marko/language-tools@2.5.39
+
+## 2.1.10
+
+### Patch Changes
+
+- [#418](https://github.com/marko-js/language-server/pull/418) [`67ae86c`](https://github.com/marko-js/language-server/commit/67ae86c463c23c79752ca839bd6dd93ff7884844) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Ensure component file imports are always normalized.
+
+- Updated dependencies [[`67ae86c`](https://github.com/marko-js/language-server/commit/67ae86c463c23c79752ca839bd6dd93ff7884844)]:
+  - @marko/language-tools@2.5.38
+
+## 2.1.9
+
+### Patch Changes
+
+- [`9680503`](https://github.com/marko-js/language-server/commit/96805033325b3a73a8a53b01c249ee2085fe4bca) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Bump language tools version.
+
+## 2.1.8
+
+### Patch Changes
+
+- [#413](https://github.com/marko-js/language-server/pull/413) [`1936e3c`](https://github.com/marko-js/language-server/commit/1936e3c1fe3c36fc8c1069a0cbb3a6744b60406b) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Ensure component.js file types are always a Marko.Component.
+
+- Updated dependencies [[`1936e3c`](https://github.com/marko-js/language-server/commit/1936e3c1fe3c36fc8c1069a0cbb3a6744b60406b)]:
+  - @marko/language-tools@2.5.36
+
+## 2.1.7
+
+### Patch Changes
+
+- [#411](https://github.com/marko-js/language-server/pull/411) [`c0357a1`](https://github.com/marko-js/language-server/commit/c0357a1b22a6f7a70e6603699af82ff6139b94ba) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix issue with d.marko generation for jsdoc Marko files with an external component file.
+
+- Updated dependencies [[`c0357a1`](https://github.com/marko-js/language-server/commit/c0357a1b22a6f7a70e6603699af82ff6139b94ba)]:
+  - @marko/language-tools@2.5.35
+
+## 2.1.6
+
+### Patch Changes
+
+- [#410](https://github.com/marko-js/language-server/pull/410) [`d46a5ee`](https://github.com/marko-js/language-server/commit/d46a5eeb831b0a05aed662291c145615f7e93790) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix issues with types after a bound attribute.
+
+- [#407](https://github.com/marko-js/language-server/pull/407) [`9f4ffe6`](https://github.com/marko-js/language-server/commit/9f4ffe6b04df6c3451a85c16b9ae8af9a4a0a2c7) Thanks [@LuLaValva](https://github.com/LuLaValva)! - Add until attribute to for
+
+- Updated dependencies [[`d46a5ee`](https://github.com/marko-js/language-server/commit/d46a5eeb831b0a05aed662291c145615f7e93790), [`9f4ffe6`](https://github.com/marko-js/language-server/commit/9f4ffe6b04df6c3451a85c16b9ae8af9a4a0a2c7)]:
+  - @marko/language-tools@2.5.34
+
+## 2.1.5
+
+### Patch Changes
+
+- [#398](https://github.com/marko-js/language-server/pull/398) [`70bb404`](https://github.com/marko-js/language-server/commit/70bb404acd0d5578543d7a4f96d585b5a372d6f2) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix if tag scope hoisting.
+
+- Updated dependencies [[`70bb404`](https://github.com/marko-js/language-server/commit/70bb404acd0d5578543d7a4f96d585b5a372d6f2)]:
+  - @marko/language-tools@2.5.32
+
+## 2.1.4
+
+### Patch Changes
+
+- [#395](https://github.com/marko-js/language-server/pull/395) [`5650739`](https://github.com/marko-js/language-server/commit/56507393b51303b4fab44bc58b4243bf206a4c54) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Improve scope hoisting types.
+
+- [#395](https://github.com/marko-js/language-server/pull/395) [`a2dcef2`](https://github.com/marko-js/language-server/commit/a2dcef201731e62c0e6ef9ce4c0c4d2134590b1b) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Avoid applying component class generics in generated tags api types.
+
+- Updated dependencies [[`5650739`](https://github.com/marko-js/language-server/commit/56507393b51303b4fab44bc58b4243bf206a4c54), [`a2dcef2`](https://github.com/marko-js/language-server/commit/a2dcef201731e62c0e6ef9ce4c0c4d2134590b1b)]:
+  - @marko/language-tools@2.5.31
+
+## 2.1.3
+
+### Patch Changes
+
+- [#392](https://github.com/marko-js/language-server/pull/392) [`ca1a4b5`](https://github.com/marko-js/language-server/commit/ca1a4b54177d257340c7a453651589ac0df07d1a) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Upgrade deps.
+
+- Updated dependencies [[`ca1a4b5`](https://github.com/marko-js/language-server/commit/ca1a4b54177d257340c7a453651589ac0df07d1a)]:
+  - @marko/language-tools@2.5.30
+
+## 2.1.2
+
+### Patch Changes
+
+- [#391](https://github.com/marko-js/language-server/pull/391) [`4a09275`](https://github.com/marko-js/language-server/commit/4a0927539002d0f8abe4b07b201ec0b9f9408920) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix multi level scope hoisting types.
+
+- Updated dependencies [[`9930a45`](https://github.com/marko-js/language-server/commit/9930a457c02601e09d3180ea0399cbc18c19446e), [`4a09275`](https://github.com/marko-js/language-server/commit/4a0927539002d0f8abe4b07b201ec0b9f9408920)]:
+  - @marko/language-tools@2.5.29
+
 ## 2.1.1
 
 ### Patch Changes

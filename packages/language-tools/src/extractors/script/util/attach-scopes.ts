@@ -1,20 +1,14 @@
-import * as t from "@babel/types";
+import { types as t } from "@marko/compiler";
 
 import {
   type Node,
   NodeType,
-  Parsed,
+  type Parsed,
   type Range,
-  Repeatable,
-  Repeated,
+  type Repeatable,
+  type Repeated,
 } from "../../../parser";
-import { isTextOnlyScript } from "./is-text-only-script";
-import type { ScriptParser } from "./script-parser";
-
-export interface Options {
-  parsed: Parsed;
-  scriptParser: ScriptParser;
-}
+import { ScriptParser } from "./script-parser";
 
 export type Scope = ProgramScope | TagScope;
 
@@ -22,14 +16,12 @@ export interface ProgramScope {
   parent: undefined;
   hoists: false;
   bindings: Bindings;
-  mutatedBindings: undefined | Set<VarBinding>;
 }
 
 export interface TagScope {
   parent: Scope;
   hoists: boolean;
   bindings: undefined | Bindings;
-  mutatedBindings: undefined | Set<VarBinding>;
 }
 
 export type Binding = VarBinding | ParamBinding | HoistedBinding;
@@ -49,7 +41,7 @@ export interface ParamBinding {
   type: BindingType.param;
   name: string;
   node: Node.ParentNode;
-  scope: TagScope;
+  scope: Scope;
   hoisted: false;
 }
 
@@ -66,39 +58,49 @@ export enum BindingType {
   hoisted,
 }
 
+export interface Mutation {
+  start: number;
+  binding: VarBinding;
+}
+
 type Bindings = { [name: string]: Binding };
 
-const ATTR_UNAMED = "value";
+const VISITOR_KEYS = (t as any).VISITOR_KEYS;
+const ATTR_UNNAMED = "value";
 const Scopes = new WeakMap<NonNullable<Node.ParentNode["body"]>, Scope>();
-const BoundAttrMemberExpressionStartOffsets = new WeakMap<
+const BoundAttrValueRange = new WeakMap<
   Node.AttrValue,
-  number
+  {
+    value: Range;
+    types: undefined | Range;
+    member:
+      | undefined
+      | (Range & {
+          computed: boolean;
+        });
+  }
 >();
 
 /**
  * Traverses the Marko tree and analyzes the bindings.
  */
-export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
-  const { program, read } = parsed;
-  const mutations: number[] = [];
+export function crawlProgramScope(parsed: Parsed, ast: ScriptParser) {
+  const { program } = parsed;
+  const mutations: Mutation[] = [];
   const potentialHoists: VarBinding[] = [];
-  const nodesToCheckForMutations = new Map<Scope, Repeated<t.Node>>();
+  const potentialMutations = new Map<Scope, Repeated<t.Node>>();
   const programScope: ProgramScope = {
     parent: undefined,
     hoists: false,
     bindings: {},
-    mutatedBindings: undefined,
   };
 
   programScope.bindings.input = {
-    type: BindingType.var,
+    type: BindingType.param,
     name: "input",
     node: program,
     scope: programScope,
     hoisted: false,
-    mutated: false,
-    sourceName: undefined,
-    objectPath: undefined,
   };
 
   visit(program.body, programScope);
@@ -106,8 +108,7 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
 
   for (const binding of potentialHoists) {
     const { scope, name } = binding as VarBinding;
-    const parentScope = scope.parent;
-    let curParent = parentScope;
+    let curParent = scope.parent;
 
     while (curParent) {
       const parentBinding = curParent.bindings?.[name];
@@ -136,22 +137,27 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
     }
 
     if (binding.hoisted) {
-      curParent = scope;
-      while (curParent && !curParent.hoists) {
+      scope.hoists = true;
+      curParent = scope.parent;
+      while (curParent && !curParent.hoists && curParent !== programScope) {
         curParent.hoists = true;
         curParent = curParent.parent;
       }
     }
   }
 
-  for (const [scope, nodes] of nodesToCheckForMutations) {
+  for (const [scope, nodes] of potentialMutations) {
+    const shadows = new Set<string>();
+    const blockMutations: t.Identifier[] = [];
     for (const node of nodes) {
-      trackMutationsInClosures(node, scope, mutations);
+      trackMutations(node, scope, mutations, shadows, blockMutations);
     }
+
+    flushMutations(scope, mutations, shadows, blockMutations);
   }
 
   if (mutations.length) {
-    return mutations.sort((a, b) => a - b) as Repeated<number>;
+    return mutations.sort(byStart) as Repeated<Mutation>;
   }
 
   function visit(body: Node.ChildNode[], parentScope: Scope) {
@@ -162,22 +168,16 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
           if (child.var) {
             parentScope.bindings ??= {};
 
-            // TODO: should support member expression tag vars.
-            const parsedFn =
-              scriptParser.expressionAt<t.ArrowFunctionExpression>(
-                child.var.value.start - 1,
-                `(${read(child.var.value)})=>0`,
-              );
+            const tagVar = ast.tagVar(child.var);
 
-            if (parsedFn) {
-              const lVal = parsedFn.params[0];
-              checkForMutations(parentScope, lVal);
+            if (tagVar) {
+              checkForMutations(parentScope, tagVar);
 
               for (const id of getVarIdentifiers(
                 parsed,
-                lVal,
+                tagVar,
                 "",
-                ATTR_UNAMED,
+                ATTR_UNNAMED,
               )) {
                 const { name, objectPath, sourceName } = id;
                 const binding: VarBinding = (parentScope.bindings[name] = {
@@ -201,20 +201,15 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
               parent: parentScope,
               hoists: false,
               bindings: {},
-              mutatedBindings: undefined,
             };
 
             if (child.params) {
               bodyScope.bindings ??= {};
 
-              const parsedFn =
-                scriptParser.expressionAt<t.ArrowFunctionExpression>(
-                  child.params.start,
-                  `(${read(child.params.value)})=>{}`,
-                );
+              const parsedParams = ast.tagParams(child.params);
 
-              if (parsedFn) {
-                for (const param of parsedFn.params) {
+              if (parsedParams) {
+                for (const param of parsedParams) {
                   checkForMutations(bodyScope, param);
                   for (const name of getIdentifiers(param)) {
                     bodyScope.bindings[name] = {
@@ -229,17 +224,16 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
               }
             }
 
-            if (isTextOnlyScript(child)) {
-              checkForMutations(
-                parentScope,
-                scriptParser.expressionAt(
-                  child.body[0].start - "async ()=>{\n".length,
-                  `async ()=>{\n${read({
-                    start: child.body[0].start,
-                    end: child.body[child.body.length - 1].end,
-                  })}\n}`,
-                ),
-              );
+            const scriptBody = ast.scriptBody(child);
+            if (scriptBody) {
+              const nodes = potentialMutations.get(parentScope);
+              if (nodes) {
+                nodes.push(...scriptBody);
+              } else {
+                potentialMutations.set(parentScope, [
+                  ...scriptBody,
+                ] as Repeated<t.Node>);
+              }
             } else {
               visit(child.body, bodyScope);
             }
@@ -250,50 +244,61 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
             for (const attr of child.attrs) {
               switch (attr.type) {
                 case NodeType.AttrSpread: {
-                  checkForMutations(
-                    parentScope,
-                    scriptParser.expressionAt(
-                      attr.value.start,
-                      read(attr.value),
-                    ),
-                  );
+                  checkForMutations(parentScope, ast.attrSpread(attr));
                   break;
                 }
                 case NodeType.AttrNamed: {
                   switch (attr.value?.type) {
                     case NodeType.AttrValue: {
-                      const parsedValue = scriptParser.expressionAt(
-                        attr.value.value.start,
-                        read(attr.value.value),
-                      );
+                      let parsedValue = ast.attrValue(attr.value);
 
                       if (parsedValue) {
-                        switch (parsedValue.type) {
-                          case "Identifier":
-                            if (attr.value.bound) {
-                              const binding = resolveWritableVar(
-                                parentScope,
-                                parsedValue.name,
-                              );
-                              if (binding) {
-                                binding.mutated = true;
-                                (parentScope.mutatedBindings ||= new Set()).add(
-                                  binding,
-                                );
-                              }
+                        if (!attr.value.bound) {
+                          checkForMutations(parentScope, parsedValue);
+                        } else {
+                          let types: Range | undefined;
+                          if (
+                            parsedValue.type === "TSAsExpression" ||
+                            parsedValue.type === "TSSatisfiesExpression"
+                          ) {
+                            types = {
+                              start: parsedValue.expression.end! + 1,
+                              end: parsedValue.end!,
+                            };
+                            parsedValue = parsedValue.expression;
+                          }
+
+                          if (parsedValue.type === "Identifier") {
+                            const binding = resolveWritableVar(
+                              parentScope,
+                              parsedValue.name,
+                            );
+                            if (binding) {
+                              binding.mutated = true;
                             }
-                            break;
-                          case "MemberExpression":
-                            if (attr.value.bound) {
-                              BoundAttrMemberExpressionStartOffsets.set(
-                                attr.value,
-                                parsedValue.property.start! - 1,
-                              );
-                            }
-                            break;
-                          default:
-                            checkForMutations(parentScope, parsedValue);
-                            break;
+
+                            BoundAttrValueRange.set(attr.value, {
+                              types,
+                              value: {
+                                start: parsedValue.start!,
+                                end: parsedValue.end!,
+                              },
+                              member: undefined,
+                            });
+                          } else if (parsedValue.type === "MemberExpression") {
+                            BoundAttrValueRange.set(attr.value, {
+                              types,
+                              value: {
+                                start: parsedValue.start!,
+                                end: parsedValue.property.start! - 1,
+                              },
+                              member: {
+                                start: parsedValue.property.start!,
+                                end: parsedValue.property.end!,
+                                computed: parsedValue.computed,
+                              },
+                            });
+                          }
                         }
                       }
 
@@ -303,13 +308,7 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
                     case NodeType.AttrMethod: {
                       checkForMutations(
                         parentScope,
-                        scriptParser.expressionAt(
-                          attr.value.params.start - 2,
-                          `{_${read({
-                            start: attr.value.params.start,
-                            end: attr.value.body.end,
-                          })}}`,
-                        ),
+                        ast.attrMethod(attr.value),
                       );
                       break;
                     }
@@ -328,39 +327,96 @@ export function crawlProgramScope(parsed: Parsed, scriptParser: ScriptParser) {
 
   function checkForMutations(scope: Scope, node?: t.Node) {
     if (node) {
-      const nodes = nodesToCheckForMutations.get(scope);
-
-      if (nodes) {
-        nodes.push(node);
-      } else {
-        nodesToCheckForMutations.set(scope, [node]);
-      }
+      traverse(node, (child) => {
+        // Since the root will always be an expression it's impossible
+        // to hit a "FunctionDeclaration" without first going through
+        // a a different function context. So we don't need to track it.
+        // case "FunctionDeclaration":
+        switch (child.type) {
+          case "FunctionDeclaration":
+          case "FunctionExpression":
+          case "ObjectMethod":
+          case "ArrowFunctionExpression":
+          case "ClassMethod":
+          case "ClassPrivateMethod": {
+            const nodes = potentialMutations.get(scope);
+            if (nodes) {
+              nodes.push(child);
+            } else {
+              potentialMutations.set(scope, [child]);
+            }
+            return true;
+          }
+        }
+      });
     }
   }
 }
 
-export function getHoists(node: Node.Program) {
+export function getProgramBindings(node: Node.Program) {
   const { bindings } = Scopes.get(node.body)!;
-  let result: Repeatable<string>;
+  let hoists: Repeatable<string>;
+  let vars: Repeatable<string>;
 
   for (const key in bindings) {
-    if (bindings[key].type === BindingType.hoisted) {
-      if (result) {
-        result.push(key);
+    switch (bindings[key].type) {
+      case BindingType.hoisted:
+        if (hoists) {
+          hoists.push(key);
+        } else {
+          hoists = [key];
+        }
+        break;
+      case BindingType.var:
+        if (vars) {
+          vars.push(key);
+        } else {
+          vars = [key];
+        }
+        break;
+    }
+  }
+
+  if (hoists || vars) {
+    return {
+      all: (vars
+        ? hoists
+          ? [...vars, ...hoists]
+          : vars
+        : hoists) as Repeated<string>,
+      vars,
+      hoists,
+    };
+  }
+}
+
+export function getMutatedVars(tag: Node.Tag) {
+  const { bindings } = Scopes.get(tag.parent.body!)!;
+  let vars: Repeatable<VarBinding>;
+
+  for (const key in bindings) {
+    const binding = bindings[key];
+    if (
+      binding.type == BindingType.var &&
+      binding.node === tag &&
+      binding.mutated
+    ) {
+      if (vars) {
+        vars.push(binding);
       } else {
-        result = [key];
+        vars = [binding];
       }
     }
   }
 
-  return result;
+  return vars;
 }
 
-export function getHoistSources(node: Node.ParentNode) {
+export function getHoistSources(body: Node.ParentNode["body"]) {
   let result: Repeatable<string>;
 
-  if (node.body) {
-    const { bindings } = Scopes.get(node.body)!;
+  if (body) {
+    const { bindings } = Scopes.get(body)!;
 
     for (const key in bindings) {
       if (bindings[key].hoisted) {
@@ -376,26 +432,27 @@ export function getHoistSources(node: Node.ParentNode) {
   return result;
 }
 
-export function getMutatedVars(node: Node.ParentNode) {
-  return Scopes.get(node.body!)!.mutatedBindings;
-}
-
 export function isMutatedVar(node: Node.ParentNode, name: string) {
-  const { mutatedBindings } = Scopes.get(node.body!)!;
-  if (mutatedBindings) {
-    for (const binding of mutatedBindings) {
-      if (binding.name === name) return true;
+  let scope = Scopes.get(node.body!);
+
+  while (scope) {
+    const binding = scope.bindings?.[name];
+    if (binding?.type === BindingType.var && binding.mutated) {
+      return true;
     }
+
+    scope = scope.parent;
   }
+
   return false;
 }
 
-export function hasHoists(node: Node.ParentTag) {
+export function hasHoists(node: Node.Tag) {
   return node.body ? Scopes.get(node.body)!.hoists : false;
 }
 
-export function getBoundAttrMemberExpressionStartOffset(value: Node.AttrValue) {
-  return BoundAttrMemberExpressionStartOffsets.get(value);
+export function getBoundAttrRange(value: Node.AttrValue) {
+  return BoundAttrValueRange.get(value);
 }
 
 function resolveWritableVar(scope: Scope, name: string) {
@@ -513,46 +570,21 @@ function* getVarIdentifiers(
   }
 }
 
-function trackMutationsInClosures(
-  root: t.Node,
-  scope: Scope,
-  mutations: number[],
-) {
-  traverse(root, (node) => {
-    switch (node.type) {
-      // Since the root will always be an expression it's impossible
-      // to hit a "FunctionDeclaration" without first going through
-      // a a different function context. So we don't need to track it.
-      // case "FunctionDeclaration":
-      case "FunctionExpression":
-      case "ObjectMethod":
-      case "ArrowFunctionExpression":
-      case "ClassMethod":
-      case "ClassPrivateMethod":
-        trackMutations(node, scope, mutations, node, new Set(), []);
-        return true;
-    }
-  });
-}
-
 function trackMutations(
   node: t.Node | null | void,
   scope: Scope,
-  mutations: number[],
-  parentBlock: t.Node,
+  mutations: Mutation[],
   parentBlockShadows: Set<string>,
   parentBlockMutations: t.Identifier[],
 ): void {
   if (!node) return;
 
-  let block = parentBlock;
   let blockShadows = parentBlockShadows;
   let blockMutations = parentBlockMutations;
 
   switch (node.type) {
     case "BlockStatement":
-      if (block !== node) {
-        block = node;
+      if (blockMutations === parentBlockMutations) {
         blockShadows = new Set(blockShadows);
         blockMutations = [];
       }
@@ -560,12 +592,10 @@ function trackMutations(
     case "ForStatement":
     case "ForInStatement":
     case "ForOfStatement":
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
       break;
     case "ArrowFunctionExpression":
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
@@ -577,7 +607,6 @@ function trackMutations(
     case "ObjectMethod":
     case "ClassMethod":
     case "ClassPrivateMethod":
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
@@ -587,7 +616,6 @@ function trackMutations(
 
       break;
     case "FunctionExpression":
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
@@ -603,7 +631,6 @@ function trackMutations(
     case "FunctionDeclaration":
       trackShadows(node.id!, scope, parentBlockShadows);
 
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
@@ -613,7 +640,6 @@ function trackMutations(
 
       break;
     case "ClassExpression":
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
@@ -626,13 +652,11 @@ function trackMutations(
         trackShadows(node.id, scope, parentBlockShadows);
       }
 
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
       break;
     case "CatchClause":
-      block = node.body;
       blockShadows = new Set(blockShadows);
       blockMutations = [];
 
@@ -657,41 +681,35 @@ function trackMutations(
       break;
   }
 
-  for (const key of t.VISITOR_KEYS[node.type]) {
+  for (const key of VISITOR_KEYS[node.type]) {
     const child = (node as any)[key] as void | null | t.Node | t.Node[];
 
     if (Array.isArray(child)) {
       for (const item of child) {
-        trackMutations(
-          item,
-          scope,
-          mutations,
-          block,
-          blockShadows,
-          blockMutations,
-        );
+        trackMutations(item, scope, mutations, blockShadows, blockMutations);
       }
     } else {
-      trackMutations(
-        child,
-        scope,
-        mutations,
-        block,
-        blockShadows,
-        blockMutations,
-      );
+      trackMutations(child, scope, mutations, blockShadows, blockMutations);
     }
   }
 
-  if (block !== parentBlock && blockMutations.length) {
-    for (const { name, start } of blockMutations) {
-      if (blockShadows.has(name)) continue;
-      const binding = resolveWritableVar(scope, name);
-      if (binding) {
-        binding.mutated = true;
-        mutations.push(start!);
-        (scope.mutatedBindings ||= new Set()).add(binding);
-      }
+  if (blockMutations !== parentBlockMutations && blockMutations.length) {
+    flushMutations(scope, mutations, blockShadows, blockMutations);
+  }
+}
+
+function flushMutations(
+  scope: Scope,
+  mutations: Mutation[],
+  blockShadows: Set<string>,
+  blockMutations: t.Identifier[],
+) {
+  for (const { name, start } of blockMutations) {
+    if (start == null || blockShadows.has(name)) continue;
+    const binding = resolveWritableVar(scope, name);
+    if (binding) {
+      binding.mutated = true;
+      mutations.push({ start, binding });
     }
   }
 }
@@ -717,7 +735,7 @@ function traverse(
 ): void {
   if (!node) return;
   if (enter(node)) return;
-  for (const key of t.VISITOR_KEYS[node.type]) {
+  for (const key of VISITOR_KEYS[node.type]) {
     const child = (node as any)[key] as void | null | t.Node | t.Node[];
 
     if (Array.isArray(child)) {
@@ -728,4 +746,8 @@ function traverse(
       traverse(child, enter);
     }
   }
+}
+
+function byStart(a: { start: number }, b: { start: number }) {
+  return a.start - b.start;
 }
