@@ -1,65 +1,92 @@
-import type { CodeMapping } from "@volar/language-core";
+import {
+  type CodeInformation,
+  type Mapper,
+  shouldReportDiagnostics,
+} from "@volar/language-core";
 import type { Diagnostic } from "@volar/language-server";
-import { TextDocument } from "vscode-languageserver-textdocument";
+import type { TextDocument } from "vscode-languageserver-textdocument";
 
 export function enhanceDiagnosticPositions(
   diagnostics: Diagnostic[],
   document: TextDocument,
-  mappings: CodeMapping[],
+  map: Mapper,
 ) {
   return diagnostics.map((diagnostic) => {
     const scriptStartOffset = document.offsetAt(diagnostic.range.start);
     const scriptEndOffset = document.offsetAt(diagnostic.range.end);
+    const shouldReport = (data: CodeInformation) =>
+      shouldReportDiagnostics(data, diagnostic.source, diagnostic.code);
 
-    if (isContainedInMapping(scriptStartOffset, scriptEndOffset, mappings)) {
+    if (
+      mapsToSourceRange(map, scriptStartOffset, scriptEndOffset, shouldReport)
+    ) {
       return diagnostic;
     }
 
-    const mappedRange = getOverlappingGeneratedRange(
+    // TypeScript sometimes reports a span that starts or ends in generated glue.
+    // Clip to the reportable generated overlap, then verify Volar can map it.
+    const reportableRange = getReportableGeneratedRange(
       scriptStartOffset,
       scriptEndOffset,
-      mappings,
+      map,
+      shouldReport,
     );
-    if (!mappedRange) return diagnostic;
+    if (!reportableRange) return diagnostic;
+
+    if (
+      !mapsToSourceRange(
+        map,
+        reportableRange.start,
+        reportableRange.end,
+        shouldReport,
+      )
+    ) {
+      return diagnostic;
+    }
 
     return {
       ...diagnostic,
       range: {
-        start: document.positionAt(mappedRange.start),
-        end: document.positionAt(mappedRange.end),
+        start: document.positionAt(reportableRange.start),
+        end: document.positionAt(reportableRange.end),
       },
     };
   });
 }
 
-function isContainedInMapping(
-  startOffset: number,
-  endOffset: number,
-  mappings: CodeMapping[],
+function mapsToSourceRange(
+  map: Mapper,
+  generatedStart: number,
+  generatedEnd: number,
+  shouldReport: (data: CodeInformation) => boolean,
 ) {
-  return mappings.some((mapping) => {
-    return getMappingSegments(mapping).some(
-      ([generatedStartOffset, length]) => {
-        const generatedEndOffset = generatedStartOffset + length;
-        return (
-          startOffset >= generatedStartOffset && endOffset <= generatedEndOffset
-        );
-      },
-    );
-  });
+  for (const _range of map.toSourceRange(
+    generatedStart,
+    generatedEnd,
+    true,
+    shouldReport,
+  )) {
+    return true;
+  }
+  return false;
 }
 
-function getOverlappingGeneratedRange(
+function getReportableGeneratedRange(
   startOffset: number,
   endOffset: number,
-  mappings: CodeMapping[],
+  map: Mapper,
+  shouldReport: (data: CodeInformation) => boolean,
 ) {
   let start: number | undefined;
   let end: number | undefined;
 
-  for (const mapping of mappings) {
-    for (const [generatedStartOffset, length] of getMappingSegments(mapping)) {
-      const generatedEndOffset = generatedStartOffset + length;
+  for (const mapping of map.mappings) {
+    if (!shouldReport(mapping.data)) continue;
+
+    for (let index = 0; index < mapping.generatedOffsets.length; index++) {
+      const generatedStartOffset = mapping.generatedOffsets[index]!;
+      const generatedEndOffset =
+        generatedStartOffset + getGeneratedLength(mapping, index);
       const overlapStart = Math.max(generatedStartOffset, startOffset);
       const overlapEnd = Math.min(generatedEndOffset, endOffset);
 
@@ -76,13 +103,13 @@ function getOverlappingGeneratedRange(
   }
 }
 
-function getMappingSegments(
-  mapping: CodeMapping,
-): [generatedOffset: number, length: number][] {
-  return mapping.generatedOffsets.map((generatedOffset, index) => {
-    const generatedLength = mapping.generatedLengths?.[index];
-    const length =
-      generatedLength ?? mapping.lengths[index] ?? mapping.lengths[0];
-    return [generatedOffset, length];
-  });
+function getGeneratedLength(
+  mapping: Mapper["mappings"][number],
+  index: number,
+) {
+  return (
+    mapping.generatedLengths?.[index] ??
+    mapping.lengths[index] ??
+    mapping.lengths[0]!
+  );
 }

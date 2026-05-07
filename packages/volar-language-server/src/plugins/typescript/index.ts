@@ -44,15 +44,22 @@ export const create = (
               const scriptCode =
                 sourceScript?.generated?.embeddedCodes.get("script");
 
-              if (rootCode instanceof MarkoVirtualCode && scriptCode) {
+              if (
+                sourceScript &&
+                rootCode instanceof MarkoVirtualCode &&
+                scriptCode
+              ) {
+                const map = context.language.maps.get(scriptCode, sourceScript);
                 return enhanceDiagnosticPositions(
                   diagnostics,
                   document,
-                  scriptCode.mappings,
+                  map,
                 ).filter(
                   (diagnostic) => !IGNORE_DIAG_REG.test(diagnostic.message),
                 );
               }
+
+              return diagnostics;
             },
           };
         },
