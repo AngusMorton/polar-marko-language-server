@@ -1,3 +1,4 @@
+import { Project } from "@marko/language-tools";
 import {
   createConnection,
   createServer,
@@ -54,6 +55,7 @@ connection.onInitialize((params) => {
 
 connection.onInitialized(() => {
   server.initialized();
+  server.fileWatcher.onDidChangeWatchedFiles(() => Project.clearCaches());
   server.fileWatcher.watchFiles([
     `**/*.{${["js", "cjs", "mjs", "ts", "cts", "mts", "json", "marko"].join(
       ",",

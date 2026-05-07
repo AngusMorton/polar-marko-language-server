@@ -52,7 +52,7 @@
     "jsdom": "^26.1.0",
     "marko": "^5.37.41",
     "prettier": "^3.6.2",
-    "prettier-plugin-marko": "^3.2.7",
+    "prettier-plugin-marko": "^4.0.9",
     "relative-import-path": "^1.0.0",
     "typescript": "^6.0.3",
     "volar-service-css": "^0.0.64",

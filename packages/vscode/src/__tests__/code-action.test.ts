@@ -27,13 +27,13 @@ async function codeAction(src: string) {
   const pendingDiagnostic = waitForNewDiagnostic();
   void updateTestDoc(src);
   await pendingDiagnostic;
-  const [{ title }] = await vscode.commands.executeCommand<vscode.Command[]>(
+  const actions = await vscode.commands.executeCommand<vscode.Command[]>(
     "vscode.executeCodeActionProvider",
     doc.uri,
     getTestEditor().selection,
   );
 
-  return title;
+  return actions.find(({ title }) => title === "Rename to 'color'")?.title;
 }
 
 function waitForNewDiagnostic(): Promise<vscode.Diagnostic> {

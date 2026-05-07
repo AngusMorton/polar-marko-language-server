@@ -63,6 +63,8 @@ export async function writeTestFiles(files: Record<string, string>) {
       );
     }),
   );
+  await openActiveFile();
+  await timers.setTimeout(500);
 }
 
 export function relativeToTempDir(fileName: string) {
@@ -70,13 +72,14 @@ export function relativeToTempDir(fileName: string) {
 }
 
 before(async () => {
-  await vscode.extensions.getExtension("Marko-JS.marko-vscode")!.activate();
   await fs.promises.writeFile(activeFile, "");
-  await vscode.commands.executeCommand(
-    "vscode.openWith",
-    vscode.Uri.file(activeFile),
-    "marko",
+  vscode.workspace.updateWorkspaceFolders(
+    0,
+    vscode.workspace.workspaceFolders?.length ?? 0,
+    { name: "marko-vscode-test", uri: vscode.Uri.file(tempDir) },
   );
+  await vscode.extensions.getExtension("AngusMorton.polar-vscode")!.activate();
+  await openActiveFile();
 
   await timers.setTimeout(500);
 });
@@ -86,11 +89,24 @@ afterEach(async () => {
     Array.from(tempFiles).map((file) => fs.promises.unlink(file).catch(noop)),
   );
   tempFiles.clear();
+  await openActiveFile();
 });
 
 after(async () => {
+  vscode.workspace.updateWorkspaceFolders(
+    0,
+    vscode.workspace.workspaceFolders?.length ?? 0,
+  );
   await Promise.all([
     vscode.commands.executeCommand("workbench.action.closeAllEditors"),
     fs.promises.rm(tempDir, { recursive: true }).catch(noop),
   ]);
 });
+
+async function openActiveFile() {
+  await vscode.commands.executeCommand(
+    "vscode.openWith",
+    vscode.Uri.file(activeFile),
+    "marko",
+  );
+}

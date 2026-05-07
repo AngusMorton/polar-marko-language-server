@@ -16,11 +16,15 @@ import { URI } from "vscode-uri";
 
 import { importMarkoPrettierPlugin, importPrettier } from "./package";
 
+type MarkoPrettierPlugin = typeof markoPrettier & {
+  setCompiler?: (compiler: unknown, config: unknown) => void;
+};
+
 export function createMarkoPrettierService(
   connection: Connection,
 ): LanguageServicePlugin {
   let prettier: typeof import("prettier") | undefined;
-  let prettierPlugin: typeof markoPrettier | undefined;
+  let prettierPlugin: MarkoPrettierPlugin | undefined;
   let hasShownNotification = false;
 
   return createPrettierService(
@@ -94,7 +98,7 @@ export function createMarkoPrettierService(
 
 export function getPrettierInstance(context: LanguageServiceContext): {
   prettierInstance?: typeof import("prettier");
-  prettierPluginMarko?: typeof import("prettier-plugin-marko");
+  prettierPluginMarko?: MarkoPrettierPlugin;
 } {
   for (const workspaceFolder of context.env.workspaceFolders) {
     if (workspaceFolder.scheme === "file") {
@@ -111,7 +115,7 @@ export function getPrettierInstance(context: LanguageServiceContext): {
 
 export async function getFormattingOptions(
   prettierInstance: typeof import("prettier"),
-  prettierPlugin: typeof markoPrettier,
+  prettierPlugin: MarkoPrettierPlugin,
   documentUriString: string,
   formatOptions: FormattingOptions,
   context: LanguageServiceContext,
@@ -155,10 +159,7 @@ export async function getFormattingOptions(
   };
 
   try {
-    prettierPlugin.setCompiler(
-      Project.getCompiler(fileDir),
-      Project.getConfig(fileDir),
-    );
+    configureMarkoPrettierPlugin(prettierPlugin, fileDir);
 
     return {
       ...resolvedConfig,
@@ -172,5 +173,19 @@ export async function getFormattingOptions(
     return {
       ...resolvedConfig,
     };
+  }
+}
+
+function configureMarkoPrettierPlugin(
+  prettierPlugin: MarkoPrettierPlugin,
+  fileDir: string,
+) {
+  // prettier-plugin-marko v4+ formats via htmljs-parser and does not need a
+  // Marko compiler. Older v3 plugins require compiler injection.
+  if (prettierPlugin.setCompiler) {
+    prettierPlugin.setCompiler(
+      Project.getCompiler(fileDir),
+      Project.getConfig(fileDir),
+    );
   }
 }

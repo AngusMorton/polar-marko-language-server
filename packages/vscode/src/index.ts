@@ -1,7 +1,6 @@
 import * as serverProtocol from "@volar/language-server/protocol";
 import {
   activateAutoInsertion,
-  activateWriteVirtualFiles,
   createLabsInfo,
   getTsdk,
   LabsInfo,
@@ -56,7 +55,6 @@ export async function activate(
 
   // support for auto close tag
   activateAutoInsertion("marko", client);
-  activateWriteVirtualFiles("marko.action.writeVirtualFiles", client);
 
   // Register VSCode features.
   debug.register(context, client);
