@@ -35,7 +35,11 @@ export const create = (): LanguageServicePlugin => {
                 0,
                 code.snapshot.getLength(),
               );
-              return { content, language: "typescript" };
+              return {
+                content,
+                language:
+                  code?.languageId === "js" ? "javascript" : "typescript",
+              };
             }
             case "marko.extractHtml": {
               const code = rootCode.embeddedCodes.find((code) => {

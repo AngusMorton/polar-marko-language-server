@@ -1,8 +1,7 @@
 import "../utils/project-defaults";
 
-import { TaglibLookup } from "@marko/compiler/babel-utils";
-import { extractHTML, parse, Project } from "@marko/language-tools";
-import { Meta } from "@marko/language-tools/src/util/project";
+import type { TaglibLookup } from "@marko/compiler/babel-utils";
+import { extractHTML, parse, Project, ScriptLang } from "@marko/language-tools";
 import {
   type CodeMapping,
   forEachEmbeddedCode,
@@ -74,8 +73,11 @@ export function createMarkoLanguagePlugin<T>(
           if (code.id === "script") {
             return {
               code,
-              extension: ".ts",
-              scriptKind: 3 satisfies ts.ScriptKind.TS,
+              extension: markoCode.scriptLang === ScriptLang.ts ? ".ts" : ".js",
+              scriptKind:
+                markoCode.scriptLang === ScriptLang.ts
+                  ? (3 satisfies ts.ScriptKind.TS)
+                  : (1 satisfies ts.ScriptKind.JS),
             };
           }
         }
@@ -94,7 +96,8 @@ export class MarkoVirtualCode implements VirtualCode {
   htmlAst: ReturnType<typeof extractHTML>;
   compiler: typeof import("@marko/compiler");
   code: string;
-  project: Meta["config"];
+  project: ReturnType<typeof Project.getConfig>;
+  scriptLang: ScriptLang;
 
   constructor(
     public fileName: string,
@@ -126,12 +129,19 @@ export class MarkoVirtualCode implements VirtualCode {
 
     this.tagLookup = Project.getTagLookup(dirname);
     this.compiler = Project.getCompiler(path.dirname(this.fileName));
+    this.scriptLang = Project.getScriptLang(
+      this.fileName,
+      ScriptLang.ts,
+      this.ts,
+      this.ts.sys,
+    );
 
     const scripts = parseScripts(
       this.markoAst,
       this.ts,
       this.tagLookup,
       this.project.translator,
+      this.scriptLang,
     );
     this.embeddedCodes.push(...scripts);
 
