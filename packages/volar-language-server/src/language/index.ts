@@ -71,11 +71,14 @@ export function createMarkoLanguagePlugin<T>(
       getServiceScript(markoCode) {
         for (const code of forEachEmbeddedCode(markoCode)) {
           if (code.id === "script") {
+            const scriptLang =
+              code.languageId === "ts" ? ScriptLang.ts : ScriptLang.js;
+
             return {
               code,
-              extension: markoCode.scriptLang === ScriptLang.ts ? ".ts" : ".js",
+              extension: scriptLang === ScriptLang.ts ? ".ts" : ".js",
               scriptKind:
-                markoCode.scriptLang === ScriptLang.ts
+                scriptLang === ScriptLang.ts
                   ? (3 satisfies ts.ScriptKind.TS)
                   : (1 satisfies ts.ScriptKind.JS),
             };

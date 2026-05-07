@@ -1,5 +1,6 @@
 import { Project } from "@marko/language-tools";
-import { Connection, ShowMessageNotification } from "@volar/language-server";
+import type { Connection } from "@volar/language-server";
+import { ShowMessageNotification } from "@volar/language-server";
 import { MessageType } from "@volar/language-server";
 import type {
   FormattingOptions,

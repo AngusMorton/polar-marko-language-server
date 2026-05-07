@@ -5,7 +5,7 @@ import {
   type Node,
   NodeType,
 } from "@marko/language-tools";
-import { LocationLink } from "@volar/language-service";
+import type { LocationLink } from "@volar/language-service";
 import fs from "fs";
 import path from "path";
 import { URI } from "vscode-uri";

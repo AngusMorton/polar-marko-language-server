@@ -1,5 +1,5 @@
 import { getLines, getLocation, type Node } from "@marko/language-tools";
-import { LocationLink } from "@volar/language-service";
+import type { LocationLink } from "@volar/language-service";
 import fs from "fs";
 import { URI } from "vscode-uri";
 

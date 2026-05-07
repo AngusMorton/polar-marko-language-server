@@ -1,4 +1,4 @@
-import { Extracted, extractHTML } from "@marko/language-tools";
+import { type Extracted, extractHTML } from "@marko/language-tools";
 import type { CodeMapping, VirtualCode } from "@volar/language-core";
 
 export function parseHtml(

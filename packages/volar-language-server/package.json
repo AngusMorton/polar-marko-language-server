@@ -54,7 +54,7 @@
     "prettier": "^3.6.2",
     "prettier-plugin-marko": "^3.2.7",
     "relative-import-path": "^1.0.0",
-    "typescript": "^5.8.3",
+    "typescript": "^6.0.3",
     "volar-service-css": "^0.0.64",
     "volar-service-emmet": "^0.0.64",
     "volar-service-html": "^0.0.64",

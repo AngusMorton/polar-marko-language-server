@@ -1,4 +1,4 @@
-import {
+import type {
   LanguageServicePlugin,
   LanguageServicePluginInstance,
 } from "@volar/language-service";

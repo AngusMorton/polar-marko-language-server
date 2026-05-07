@@ -1,4 +1,4 @@
-import { LanguageServicePlugin } from "@volar/language-service";
+import type { LanguageServicePlugin } from "@volar/language-service";
 import { URI } from "vscode-uri";
 
 import { MarkoVirtualCode } from "../../language";
