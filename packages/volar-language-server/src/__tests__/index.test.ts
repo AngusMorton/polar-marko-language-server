@@ -124,6 +124,11 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
           results += "## Diagnostics\n";
 
           diagnosticReport.items.sort((a, b) => {
+            const sourceDiff =
+              getDiagnosticSourcePriority(a.source) -
+              getDiagnosticSourcePriority(b.source);
+            if (sourceDiff !== 0) return sourceDiff;
+
             const lineDiff = a.range.start.line - b.range.start.line;
             if (lineDiff === 0) {
               return a.range.start.character - b.range.start.character;
@@ -150,6 +155,13 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
       }
     });
   }
+}
+
+function getDiagnosticSourcePriority(source: string | undefined) {
+  if (source === "marko") return 0;
+  if (source === "ts") return 1;
+  if (source?.startsWith("axe-core")) return 2;
+  return 3;
 }
 
 // if (SHOULD_BENCH) {

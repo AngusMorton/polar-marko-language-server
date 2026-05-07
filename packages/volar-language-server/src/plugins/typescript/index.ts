@@ -8,6 +8,11 @@ import { URI } from "vscode-uri";
 import { MarkoVirtualCode } from "../../language";
 import { enhanceDiagnosticPositions } from "./diagnostic-enhancements";
 
+// Filter out syntax errors from generated TS that are surfaced more accurately
+// by the Marko compiler, matching the original language server behavior.
+const IGNORE_DIAG_REG =
+  /^(?:(?:Expression|Identifier|['"][^\w]['"]) expected|Invalid character)\b/i;
+
 export const create = (
   ts: typeof import("typescript"),
 ): LanguageServicePlugin[] => {
@@ -44,6 +49,8 @@ export const create = (
                   diagnostics,
                   document,
                   scriptCode.mappings,
+                ).filter(
+                  (diagnostic) => !IGNORE_DIAG_REG.test(diagnostic.message),
                 );
               }
             },
