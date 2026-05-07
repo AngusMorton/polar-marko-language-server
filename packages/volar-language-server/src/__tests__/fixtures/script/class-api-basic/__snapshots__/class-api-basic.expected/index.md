@@ -19,28 +19,6 @@
   5 |   year: number,
 ```
 
-### Ln 30, Col 14
-```marko
-  28 |
-  29 | static {
-> 30 |     function greet() {
-     |              ^^^^^ 'greet' is declared but its value is never read.
-  31 |         return "hello world";
-  32 |     }
-  33 | }
-```
-
-### Ln 35, Col 12
-```marko
-  33 | }
-  34 |
-> 35 | static var useA = true;
-     |            ^^^^ 'useA' is declared but its value is never read.
-  36 |
-  37 | static type Mobile = {
-  38 |     brandName: string;
-```
-
 ### Ln 19, Col 17
 ```marko
   17 |         console.log("mounted");
@@ -61,6 +39,28 @@
   25 |     name: "Frank",
   26 |     age: 32
   27 | };
+```
+
+### Ln 30, Col 14
+```marko
+  28 |
+  29 | static {
+> 30 |     function greet() {
+     |              ^^^^^ 'greet' is declared but its value is never read.
+  31 |         return "hello world";
+  32 |     }
+  33 | }
+```
+
+### Ln 35, Col 12
+```marko
+  33 | }
+  34 |
+> 35 | static var useA = true;
+     |            ^^^^ 'useA' is declared but its value is never read.
+  36 |
+  37 | static type Mobile = {
+  38 |     brandName: string;
 ```
 
 ### Ln 69, Col 13
