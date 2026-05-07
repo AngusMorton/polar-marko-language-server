@@ -27,8 +27,10 @@ export const create = (): LanguageServicePlugin => {
             return;
           }
 
-          const { prettierInstance, prettierPluginMarko } =
-            getPrettierInstance(context);
+          const { prettierInstance, prettierPluginMarko } = getPrettierInstance(
+            context,
+            fileUri,
+          );
           if (!prettierInstance || !prettierPluginMarko) {
             return;
           }

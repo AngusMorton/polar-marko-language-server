@@ -49,10 +49,12 @@ export const create = (): LanguageServicePlugin => {
               );
 
             const release = await acquireMutexLock();
-            const violations = await getViolationNodes(
-              Object.keys(ruleExceptions),
-            );
-            release();
+            let violations: Awaited<ReturnType<typeof getViolationNodes>>;
+            try {
+              violations = await getViolationNodes(Object.keys(ruleExceptions));
+            } finally {
+              release();
+            }
 
             return violations.flatMap((result) => {
               const { element } = result;

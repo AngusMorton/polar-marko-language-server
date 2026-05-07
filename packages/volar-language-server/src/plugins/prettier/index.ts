@@ -59,8 +59,8 @@ export function createMarkoPrettierService(
     },
     {
       documentSelector: [{ language: "marko" }],
-      isFormattingEnabled: async (prettier, document, _) => {
-        const uri = URI.parse(document.uri);
+      isFormattingEnabled: async (prettier, document, context) => {
+        const uri = getDocumentUri(context, document.uri);
         if (uri.scheme === "file") {
           const fileInfo = await prettier.getFileInfo(uri.fsPath, {
             ignorePath: ".prettierignore",
@@ -96,21 +96,77 @@ export function createMarkoPrettierService(
   );
 }
 
-export function getPrettierInstance(context: LanguageServiceContext): {
+export function getPrettierInstance(
+  context: LanguageServiceContext,
+  documentUriString?: string,
+): {
   prettierInstance?: typeof import("prettier");
   prettierPluginMarko?: MarkoPrettierPlugin;
 } {
-  for (const workspaceFolder of context.env.workspaceFolders) {
-    if (workspaceFolder.scheme === "file") {
-      const prettierInstance = importPrettier(workspaceFolder.fsPath);
-      const prettierPluginMarko = importMarkoPrettierPlugin(
-        workspaceFolder.fsPath,
-      );
+  const workspaceFolder = getDocumentWorkspaceFolder(
+    context,
+    documentUriString,
+  );
 
-      return { prettierInstance, prettierPluginMarko };
+  if (workspaceFolder) {
+    const prettierInstance = importPrettier(workspaceFolder.fsPath);
+    const prettierPluginMarko = importMarkoPrettierPlugin(
+      workspaceFolder.fsPath,
+    );
+
+    return { prettierInstance, prettierPluginMarko };
+  }
+
+  return {};
+}
+
+function getDocumentUri(
+  context: LanguageServiceContext,
+  documentUriString: string,
+) {
+  const uri = URI.parse(documentUriString);
+  return context.decodeEmbeddedDocumentUri(uri)?.[0] ?? uri;
+}
+
+function getDocumentWorkspaceFolder(
+  context: LanguageServiceContext,
+  documentUriString?: string,
+) {
+  const fileWorkspaceFolders = context.env.workspaceFolders.filter(
+    (workspaceFolder) => workspaceFolder.scheme === "file",
+  );
+
+  if (!documentUriString) {
+    return fileWorkspaceFolders[0];
+  }
+
+  const documentUri = getDocumentUri(context, documentUriString);
+  if (documentUri.scheme !== "file") {
+    return fileWorkspaceFolders[0];
+  }
+
+  const documentPath = normalizeFsPath(documentUri.fsPath);
+  let bestMatch = fileWorkspaceFolders[0];
+  let bestMatchLength = -1;
+
+  for (const workspaceFolder of fileWorkspaceFolders) {
+    const workspacePath = normalizeFsPath(workspaceFolder.fsPath);
+    if (
+      documentPath === workspacePath ||
+      documentPath.startsWith(`${workspacePath}/`)
+    ) {
+      if (workspacePath.length > bestMatchLength) {
+        bestMatch = workspaceFolder;
+        bestMatchLength = workspacePath.length;
+      }
     }
   }
-  return {};
+
+  return bestMatch;
+}
+
+function normalizeFsPath(filePath: string) {
+  return filePath.replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 export async function getFormattingOptions(
