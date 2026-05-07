@@ -1,6 +1,6 @@
 import {
   type BaseLanguageClient,
-  ExecuteCommandParams,
+  type ExecuteCommandParams,
   ExecuteCommandRequest,
   TextEdit,
 } from "@volar/vscode";

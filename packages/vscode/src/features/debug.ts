@@ -1,6 +1,6 @@
 import {
   type BaseLanguageClient,
-  ExecuteCommandParams,
+  type ExecuteCommandParams,
   ExecuteCommandRequest,
 } from "@volar/vscode";
 import * as vscode from "vscode";

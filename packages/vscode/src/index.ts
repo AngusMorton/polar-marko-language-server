@@ -3,7 +3,7 @@ import {
   activateAutoInsertion,
   createLabsInfo,
   getTsdk,
-  LabsInfo,
+  type LabsInfo,
 } from "@volar/vscode";
 import * as vscode from "vscode";
 import * as lsp from "vscode-languageclient/node";

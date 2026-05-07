@@ -3,6 +3,7 @@ import fs from "fs";
 import snapshot from "mocha-snap";
 import path from "path";
 import { Position } from "vscode-languageserver";
+import { ExitNotification } from "vscode-languageserver-protocol/node";
 // import { bench, run } from "mitata";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
@@ -22,6 +23,7 @@ const FIXTURE_DIR = path.join(__dirname, "fixtures");
 after(async () => {
   const handle = await getLanguageServer();
   await handle.shutdown();
+  handle.connection.sendNotification(ExitNotification.type);
 });
 
 for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
