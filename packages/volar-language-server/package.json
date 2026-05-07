@@ -16,14 +16,7 @@
     "url": "https://github.com/marko-js/language-server/tree/main/packages/volar-language-server"
   },
   "license": "MIT",
-  "exports": {
-    ".": {
-      "import": "./dist/index.mjs",
-      "default": "./dist/index.js"
-    }
-  },
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
   "bin": {
     "marko-language-server": "./bin.js"
   },

@@ -42,5 +42,4 @@ await Promise.all([
   ),
   // Build the JavaScript bundles
   build({ ...opts, format: "cjs" }),
-  build({ ...opts, format: "esm", outExtension: { ".js": ".mjs" } }),
 ]);
