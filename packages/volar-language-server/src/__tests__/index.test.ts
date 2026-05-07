@@ -3,12 +3,14 @@ import fs from "fs";
 import snapshot from "mocha-snap";
 import path from "path";
 import { Position } from "vscode-languageserver";
-import { ExitNotification } from "vscode-languageserver-protocol/node";
 // import { bench, run } from "mitata";
 import { TextDocument } from "vscode-languageserver-textdocument";
 
 import { codeFrame } from "./util/code-frame";
-import { getLanguageServer } from "./util/language-service";
+import {
+  getLanguageServer,
+  shutdownLanguageServer,
+} from "./util/language-service";
 
 Project.setDefaultTypePaths({
   internalTypesFile:
@@ -20,11 +22,7 @@ Project.setDefaultTypePaths({
 // const BENCHED = new Set<string>();
 const FIXTURE_DIR = path.join(__dirname, "fixtures");
 
-after(async () => {
-  const handle = await getLanguageServer();
-  await handle.shutdown();
-  handle.connection.sendNotification(ExitNotification.type);
-});
+after(shutdownLanguageServer);
 
 for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
   const fixtureSubdir = path.join(FIXTURE_DIR, subdir);

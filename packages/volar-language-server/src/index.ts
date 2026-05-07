@@ -62,3 +62,5 @@ connection.onInitialized(() => {
     )}}`,
   ]);
 });
+
+connection.onShutdown(server.shutdown);

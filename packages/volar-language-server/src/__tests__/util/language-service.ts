@@ -53,6 +53,16 @@ export async function getLanguageServer() {
   return serverHandle;
 }
 
+export async function shutdownLanguageServer() {
+  if (!serverHandle) {
+    return;
+  }
+
+  await serverHandle.shutdown();
+  serverHandle.connection.sendNotification(protocol.ExitNotification.type);
+  serverHandle = undefined;
+}
+
 export function loadMarkoFiles(dir: string, all = new Set<string>()) {
   for (const entry of fs.readdirSync(dir)) {
     const file = path.join(dir, entry);
