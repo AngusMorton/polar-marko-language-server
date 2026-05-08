@@ -14,7 +14,6 @@ export function parseScripts(
   translator: ReturnType<typeof Project.getConfig>["translator"],
   scriptLang: ScriptLang,
   runtimeTypesCode?: string,
-  tagsBodyContentKey?: "content" | "renderBody",
 ): VirtualCode[] {
   const script = extractScript({
     parsed,
@@ -23,7 +22,6 @@ export function parseScripts(
     ts: ts,
     translator,
     runtimeTypesCode,
-    tagsBodyContentKey,
   });
   const scriptText = script.toString();
 

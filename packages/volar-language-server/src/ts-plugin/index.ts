@@ -6,17 +6,12 @@ import { addMarkoTypes, createMarkoLanguagePlugin } from "../language";
 export const init = createLanguageServicePlugin((ts, info) => {
   const { languageServiceHost } = info;
   const rootPath = languageServiceHost.getCurrentDirectory();
-  const getRuntimeTypes = () => {
-    const typeLibs = Project.getTypeLibs(rootPath, ts, languageServiceHost);
-    return {
-      code: typeLibs.markoTypesCode,
-      tagsBodyContentKey: typeLibs.tagsBodyContentKey,
-    };
-  };
+  const getRuntimeTypesCode = () =>
+    Project.getTypeLibs(rootPath, ts, languageServiceHost).markoTypesCode;
 
   return {
     languagePlugins: [
-      createMarkoLanguagePlugin(ts, (id) => id, getRuntimeTypes),
+      createMarkoLanguagePlugin(ts, (id) => id, getRuntimeTypesCode),
     ],
     setup(_language) {
       addMarkoTypes(rootPath, ts, languageServiceHost);

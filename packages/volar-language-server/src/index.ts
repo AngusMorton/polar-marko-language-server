@@ -40,18 +40,11 @@ connection.onInitialize((params) => {
       let rootPath: string | undefined;
       let languageServiceHost: ts.LanguageServiceHost | undefined;
 
-      const getRuntimeTypes = () => {
+      const getRuntimeTypesCode = () => {
         if (!rootPath || !languageServiceHost) return;
 
-        const typeLibs = Project.getTypeLibs(
-          rootPath,
-          typescript,
-          languageServiceHost,
-        );
-        return {
-          code: typeLibs.markoTypesCode,
-          tagsBodyContentKey: typeLibs.tagsBodyContentKey,
-        };
+        return Project.getTypeLibs(rootPath, typescript, languageServiceHost)
+          .markoTypesCode;
       };
 
       return {
@@ -59,7 +52,7 @@ connection.onInitialize((params) => {
           createMarkoLanguagePlugin(
             typescript,
             (uri: URI) => uri.fsPath.replace(/\\/g, "/"),
-            getRuntimeTypes,
+            getRuntimeTypesCode,
           ),
         ],
         setup({ project }) {
