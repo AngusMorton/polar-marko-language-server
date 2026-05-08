@@ -35,10 +35,10 @@ export async function activate(
       options: debugOptions,
     },
   };
-  const tssdk = await getTsdk(context);
+  const tsdkInfo = await getTsdk(context);
   const initializationOptions = {
     typescript: {
-      tsdk: tssdk!.tsdk,
+      tsdk: tsdkInfo!.tsdk,
     },
   };
   const clientOptions: lsp.LanguageClientOptions = {

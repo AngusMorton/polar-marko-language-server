@@ -45,7 +45,7 @@ export async function getLanguageServer() {
 
     // Ensure that our first test does not suffer from a TypeScript overhead
     await serverHandle.sendCompletionRequest(
-      "file://doesnt-exists",
+      "file://does-not-exist",
       protocol.Position.create(0, 0),
     );
   }
