@@ -44,6 +44,14 @@ export async function activate(
   const clientOptions: lsp.LanguageClientOptions = {
     documentSelector: [{ language: "marko" }],
     initializationOptions,
+    synchronize: {
+      fileEvents: vscode.workspace.createFileSystemWatcher(
+        "**/{*.ts,*.mts,*.cts,*.js,*.mjs,*.marko,marko.json,marko-tag.json,tsconfig.json,jsconfig.json,package.json,package-lock.json,pnpm-lock.yaml,yarn.lock}",
+        false,
+        false,
+        false,
+      ),
+    },
   };
   client = new lsp.LanguageClient(
     "marko",

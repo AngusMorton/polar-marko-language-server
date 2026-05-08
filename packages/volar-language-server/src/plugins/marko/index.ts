@@ -9,6 +9,7 @@ import { MarkoVirtualCode } from "../../language";
 import { provideCompletions } from "./complete";
 import { provideDefinitions } from "./definition";
 import { provideHover } from "./hover";
+import { resolveSourceMarkoOffset } from "./util/resolve-marko-code";
 import { provideValidations } from "./validate";
 // import { provideDocumentSymbols } from "./document-symbols";
 
@@ -59,10 +60,10 @@ export const create = (
         // },
         provideDefinition(document, position, token) {
           if (token.isCancellationRequested) return;
-          return worker(document, (virtualCode) => {
-            const offset = document.offsetAt(position);
-            return provideDefinitions(virtualCode, offset);
-          });
+          const result = resolveSourceMarkoOffset(context, document, position);
+          if (result) {
+            return provideDefinitions(result.virtualCode, result.offset);
+          }
         },
         provideDiagnostics(document, token) {
           if (token.isCancellationRequested) return;
