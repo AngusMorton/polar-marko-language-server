@@ -49,6 +49,14 @@ export function addMarkoTypes(
 export function createMarkoLanguagePlugin<T>(
   ts: typeof import("typescript"),
   asFileName: (scriptId: T) => string,
+  getRuntimeTypes?:
+    | ((fileName: string) =>
+        | {
+            code: string | undefined;
+            tagsBodyContentKey: "content" | "renderBody";
+          }
+        | undefined)
+    | undefined,
 ): LanguagePlugin<T, MarkoVirtualCode> {
   return {
     getLanguageId(scriptId) {
@@ -61,7 +69,12 @@ export function createMarkoLanguagePlugin<T>(
     createVirtualCode(scriptId, languageId, snapshot) {
       if (languageId === "marko") {
         const fileName = asFileName(scriptId);
-        return new MarkoVirtualCode(fileName, snapshot, ts);
+        return new MarkoVirtualCode(
+          fileName,
+          snapshot,
+          ts,
+          getRuntimeTypes?.(fileName),
+        );
       }
     },
     typescript: {
@@ -106,6 +119,10 @@ export class MarkoVirtualCode implements VirtualCode {
     public fileName: string,
     public snapshot: ts.IScriptSnapshot,
     public ts: typeof import("typescript"),
+    private runtimeTypes?: {
+      code: string | undefined;
+      tagsBodyContentKey: "content" | "renderBody";
+    },
   ) {
     this.mappings = [
       {
@@ -145,6 +162,8 @@ export class MarkoVirtualCode implements VirtualCode {
       this.tagLookup,
       this.project.translator,
       this.scriptLang,
+      this.runtimeTypes?.code,
+      this.runtimeTypes?.tagsBodyContentKey,
     );
     this.embeddedCodes.push(...scripts);
 
