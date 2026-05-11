@@ -18,6 +18,20 @@ Project.setDefaultTypePaths({
 export async function getLanguageServer() {
   // Use the fixtures directory as the workspace root for proper type resolution
   const fixturesDir = path.resolve(rootDir, "./__tests__/fixtures/");
+  const capabilities: protocol.ClientCapabilities = {
+    textDocument: {
+      completion: {
+        completionItem: {
+          documentationFormat: [
+            protocol.MarkupKind.Markdown,
+            protocol.MarkupKind.PlainText,
+          ],
+          insertReplaceSupport: true,
+          snippetSupport: true,
+        },
+      },
+    },
+  };
   const compilerOptions: ts.CompilerOptions = {
     ...ts.getDefaultCompilerOptions(),
     rootDir: fixturesDir,
@@ -39,9 +53,13 @@ export async function getLanguageServer() {
       require.resolve("typescript/lib/typescript.js"),
     );
     // Initialize the server with the fixtures directory as the root workspace
-    await serverHandle.initialize(fixturesDir, {
-      typescript: { tsdk: tsdkPath, compilerOptions },
-    });
+    await serverHandle.initialize(
+      fixturesDir,
+      {
+        typescript: { tsdk: tsdkPath, compilerOptions },
+      },
+      capabilities,
+    );
 
     // Ensure that our first test does not suffer from a TypeScript overhead
     await serverHandle.sendCompletionRequest(
