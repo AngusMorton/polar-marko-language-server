@@ -1,6 +1,7 @@
 import type { TaglibLookup } from "@marko/compiler/babel-utils";
 import {
   extractScript,
+  NodeType,
   parse,
   Project,
   ScriptLang,
@@ -46,7 +47,10 @@ export function parseScripts(
     const sourceEnd = token.sourceStart + token.length;
     const key = `${token.sourceStart}:${token.length}`;
     const sourceText = parsed.code.slice(token.sourceStart, sourceEnd);
+    const sourceNode = parsed.nodeAt(token.sourceStart);
     const isPrimary = firstGeneratedBySource.get(key) === token.generatedStart;
+    const shouldUseSourceAttrCompletions =
+      sourceNode?.type === NodeType.AttrName;
 
     // Container tokens can cover later, more precise source tokens. If both are
     // semantic, Volar may prefer the wrapper expression over the real source
@@ -97,7 +101,7 @@ export function parseScripts(
       generatedOffsets: [token.generatedStart],
       lengths: [semanticLength],
       data: {
-        completion: true,
+        completion: !shouldUseSourceAttrCompletions,
         format: false,
         navigation: true,
         semantic: true,

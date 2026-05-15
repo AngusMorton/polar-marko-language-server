@@ -1,0 +1,14 @@
+/** Child tag. */
+export interface Input {
+  /** Current value. */
+  value: number | string;
+  /** Change handler. */
+  valueChange?(next: string): void;
+  /** Row attr tag. */
+  row?: Marko.AttrTag<{
+    /** Whether the row is enabled. */
+    enabled?: boolean;
+    /** Row body. */
+    renderBody?: Marko.Body<[data: { id: string }], void>;
+  }>;
+}

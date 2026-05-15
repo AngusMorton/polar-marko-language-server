@@ -1,3 +1,4 @@
+import type { InputMeta, TagMeta } from "@marko/component-meta";
 import type { Node } from "@marko/language-tools";
 import {
   type CompletionItem,
@@ -9,11 +10,13 @@ import {
 } from "vscode-languageserver";
 
 import { MarkoVirtualCode } from "../../../language";
+import { formatInputMetaDocumentation } from "../../marko-template/documentation";
 
 export function AttrName(
   node: Node.AttrName,
   file: MarkoVirtualCode,
   offset: number,
+  tagMeta?: Pick<TagMeta, "inputs">,
 ): CompletionItem[] | undefined {
   let name = file.markoAst.read(node);
   const modifierIndex = name.indexOf(":");
@@ -39,6 +42,10 @@ export function AttrName(
   }
 
   const completions: CompletionItem[] = [];
+  const seenNames = new Set<string>();
+  const inputMetaByName = new Map<string, InputMeta>(
+    tagMeta?.inputs.map((input) => [input.name, input]) ?? [],
+  );
   const attrNameLoc = file.markoAst.locationAt(
     hasModifier
       ? {
@@ -72,16 +79,21 @@ export function AttrName(
     }
 
     const type = attr.type || (attr.html ? "string" : null);
+    const inputMeta = inputMetaByName.get(attr.name);
+    const enumValues = inputMeta?.enumValues ?? attr.enum;
+    seenNames.add(attr.name);
     const documentation: MarkupContent = {
       kind: MarkupKind.Markdown,
-      value: attr.description || "",
+      value: inputMeta
+        ? formatInputMetaDocumentation(inputMeta, attr.description)
+        : attr.description || "",
     };
     let label = attr.name;
     let snippet = attr.name;
 
-    if (attr.enum) {
+    if (enumValues?.length) {
       // TODO: We should use the following, but vscode has a regression with multi choice snippets form the language server.
-      // snippet += `="\${1|${attr.enum.join()}|}"$0`;
+      // snippet += `="\${1|${enumValues.join()}|}"$0`;
       snippet += `="$1"$0`;
     } else {
       switch (type) {
@@ -131,6 +143,35 @@ export function AttrName(
       textEdit: TextEdit.replace(attrNameLoc, snippet),
     });
   });
+
+  for (const input of tagMeta?.inputs ?? []) {
+    if (seenNames.has(input.name) || nestedTagAttrs[input.name]) {
+      continue;
+    }
+
+    let snippet = input.name;
+    if (input.enumValues?.length || /^(?:string|number)$/.test(input.type)) {
+      snippet += '="$1"$0';
+    } else if (
+      /=>|^\(.*\)\s*=>|^\(.*\):/.test(input.type) ||
+      /=>/.test(input.type)
+    ) {
+      snippet += "=($1)$0";
+    } else if (input.type !== "boolean") {
+      snippet += "=";
+    }
+
+    completions.push({
+      label: input.required ? input.name : `${input.name}?`,
+      documentation: {
+        kind: MarkupKind.Markdown,
+        value: formatInputMetaDocumentation(input),
+      },
+      kind: CompletionItemKind.Property,
+      insertTextFormat: InsertTextFormat.Snippet,
+      textEdit: TextEdit.replace(attrNameLoc, snippet),
+    });
+  }
 
   return completions;
 }

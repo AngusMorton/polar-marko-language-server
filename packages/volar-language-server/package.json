@@ -33,6 +33,7 @@
   "dependencies": {
     "@luxass/strip-json-comments": "^1.4.0",
     "@marko/compiler": "^5.39.29",
+    "@marko/component-meta": "0.0.0",
     "@marko/language-tools": "^2.5.27",
     "@volar/kit": "^2.4.14",
     "@volar/language-core": "^2.4.14",

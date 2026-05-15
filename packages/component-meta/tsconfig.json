@@ -7,8 +7,5 @@
     "rootDir": "src",
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
-  "references": [
-    { "path": "../language-tools" },
-    { "path": "../component-meta" }
-  ]
+  "references": [{ "path": "../language-tools" }]
 }

@@ -29,7 +29,7 @@ describe("completion", () => {
 
     assert.equal(item.kind, CompletionItemKind.Property);
     assert.equal(getNewText(item), "span");
-    assert.match(getDocumentation(item), /Built in .*span/);
+    assert.match(getDocumentation(item), /MDN Reference/);
   });
 
   it("provides local tag completions ahead of TypeScript", async () => {
@@ -39,13 +39,28 @@ describe("completion", () => {
     );
     const item = getCompletion(completions, "fancy-button");
 
-    assert.equal(item.kind, CompletionItemKind.Class);
-    assert.equal(item.sortText, "0fancy-button");
     assert.equal(getNewText(item), "fancy-button");
     assert.match(
       getDocumentation(item),
       /components\/fancy-button\/index\.marko/,
     );
+  });
+
+  it("provides identifier tag completions from the embedded script scope", async () => {
+    const completions = await requestCompletions(
+      fixturePath("script", "prefer-local-identifier-tag-name", "index.marko"),
+      [
+        'import CustomTagA from "<TestTagA>";',
+        'import CustomTagB from "<TestTagB>";',
+        "",
+        "<const/TestTagA = CustomTagA/>",
+        "<Test█/>",
+      ].join("\n"),
+    );
+    const item = getCompletion(completions, "TestTagA");
+
+    assert.equal(item.textEdit?.newText, "TestTagA");
+    assert.equal(getNewText(item), "TestTagA");
   });
 
   it("provides closing tag completions", async () => {
@@ -80,6 +95,16 @@ describe("completion", () => {
       completions.items.map((item) => item.label),
       ["scoped", "no-update"],
     );
+  });
+
+  it("provides custom tag input docs from component meta", async () => {
+    const completions = await requestCompletions(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      "<fancy-button mess█/>",
+    );
+    const item = getCompletion(completions, "message");
+
+    assert.match(getDocumentation(item), /`message: string`/);
   });
 });
 

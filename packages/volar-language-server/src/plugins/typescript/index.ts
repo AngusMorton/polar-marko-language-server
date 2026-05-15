@@ -1,4 +1,5 @@
 import type {
+  CompletionItem,
   LanguageServicePlugin,
   LanguageServicePluginInstance,
 } from "@volar/language-server";
@@ -60,6 +61,25 @@ export const create = (
               }
 
               return diagnostics;
+            },
+            transformCompletionItem(item: CompletionItem) {
+              const data = item.data as
+                | {
+                    uri?: string;
+                    embeddedDocumentUri?: string;
+                  }
+                | undefined;
+              if (
+                data?.embeddedDocumentUri?.includes(
+                  "volar-embedded-content://script/",
+                ) &&
+                /^[A-Z][\w$]*$/.test(String(item.label))
+              ) {
+                item.kind = 7;
+                item.sortText = `0${item.textEdit?.newText ?? item.insertText ?? item.label}`;
+              }
+
+              return item;
             },
           };
         },

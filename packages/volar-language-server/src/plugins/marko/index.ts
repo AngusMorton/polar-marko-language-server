@@ -6,10 +6,6 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
 
 import { MarkoVirtualCode } from "../../language";
-import { provideCompletions } from "./complete";
-import { provideDefinitions } from "./definition";
-import { provideHover } from "./hover";
-import { resolveSourceMarkoOffset } from "./util/resolve-marko-code";
 import { provideValidations } from "./validate";
 // import { provideDocumentSymbols } from "./document-symbols";
 
@@ -19,34 +15,9 @@ export const create = (
   return {
     name: "marko",
     capabilities: {
-      hoverProvider: true,
-      definitionProvider: true,
       diagnosticProvider: {
         interFileDependencies: false,
         workspaceDiagnostics: false,
-      },
-      completionProvider: {
-        triggerCharacters: [
-          ".",
-          ":",
-          "<",
-          ">",
-          "@",
-          "/",
-          '"',
-          "'",
-          "`",
-          " ",
-          "=",
-          "*",
-          "#",
-          "$",
-          "+",
-          "^",
-          "(",
-          "[",
-          "-",
-        ],
       },
     },
     create(context): LanguageServicePluginInstance {
@@ -58,46 +29,10 @@ export const create = (
         //     return provideDocumentSymbols(virtualCode);
         //   });
         // },
-        provideDefinition(document, position, token) {
-          if (token.isCancellationRequested) return;
-          const result = resolveSourceMarkoOffset(context, document, position);
-          if (result) {
-            return provideDefinitions(result.virtualCode, result.offset);
-          }
-        },
         provideDiagnostics(document, token) {
           if (token.isCancellationRequested) return;
           return worker(document, async (virtualCode) => {
             return await provideValidations(virtualCode);
-          });
-        },
-        provideHover(document, position, token) {
-          if (token.isCancellationRequested) return;
-          return worker(document, (virtualCode) => {
-            const offset = document.offsetAt(position);
-            return provideHover(virtualCode, offset);
-          });
-        },
-        provideCompletionItems(document, position, _, token) {
-          if (token.isCancellationRequested) return;
-          return worker(document, (virtualCode) => {
-            const offset = document.offsetAt(position);
-            const completions = provideCompletions(virtualCode, offset);
-
-            if (completions) {
-              return {
-                isIncomplete: false,
-                items: completions.map((it) => {
-                  it.data = { source: "marko" };
-                  return it;
-                }),
-              };
-            }
-
-            return {
-              items: [],
-              isIncomplete: true,
-            };
           });
         },
       };

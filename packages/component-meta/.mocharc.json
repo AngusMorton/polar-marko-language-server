@@ -1,0 +1,6 @@
+{
+  "timeout": 10000,
+  "enable-source-maps": true,
+  "watchFiles": ["src/**/*.@(ts|marko|json)", "!**/__snapshots__/**"],
+  "require": ["tsx", "mocha-snap"]
+}

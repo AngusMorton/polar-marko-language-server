@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/language-tools" },
+    { "path": "./packages/component-meta" },
     { "path": "./packages/language-server" },
     { "path": "./packages/type-check" },
     { "path": "./packages/vscode" }

@@ -1,0 +1,13 @@
+/** Fancy button tag. */
+export interface Input<T extends string = string> {
+  /** Main button label. */
+  message: T;
+  /** Supported themes. */
+  theme?: "primary" | "secondary";
+  /** Optional click hook. */
+  onPress?(): void;
+  /** Body rendered inside the button. */
+  renderBody?: Marko.Body<[state: { pressed: boolean }], void>;
+}
+
+<button>${input.message}</button>
