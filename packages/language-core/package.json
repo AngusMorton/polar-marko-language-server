@@ -1,0 +1,45 @@
+{
+  "name": "@marko/language-core",
+  "version": "0.0.0",
+  "description": "Core Volar language primitives for Marko",
+  "keywords": [
+    "language",
+    "marko",
+    "volar"
+  ],
+  "homepage": "https://github.com/marko-js/language-server/tree/main/packages/language-core/README.md",
+  "bugs": "https://github.com/marko-js/language-server/issues/new?template=bug-report.yml",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marko-js/language-server/tree/main/packages/language-core"
+  },
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "files": [
+    "dist",
+    "!**/__tests__",
+    "!**/*.tsbuildinfo"
+  ],
+  "scripts": {
+    "build": "tsx build.mts",
+    "test": "mocha './src/**/__tests__/*.test.ts'"
+  },
+  "dependencies": {
+    "@marko/compiler": "^5.39.63",
+    "@marko/language-tools": "^2.5.58",
+    "@volar/language-core": "^2.4.14",
+    "@volar/typescript": "^2.4.14",
+    "marko": "^5.38.36",
+    "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}

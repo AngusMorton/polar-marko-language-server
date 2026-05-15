@@ -1,3 +1,4 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import type {
   CompletionItem,
   LanguageServicePlugin,
@@ -6,7 +7,6 @@ import type {
 import { create as createTypeScriptServices } from "volar-service-typescript";
 import { URI } from "vscode-uri";
 
-import { MarkoVirtualCode } from "../../language";
 import { enhanceDiagnosticPositions } from "./diagnostic-enhancements";
 
 // Filter out syntax errors from generated TS that are surfaced more accurately

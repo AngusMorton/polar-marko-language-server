@@ -142,7 +142,7 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
             };
             results += `### Ln ${loc.start.line + 1}, Col ${
               loc.start.character + 1
-            }\n\`\`\`marko\n${codeFrame(code, error.message, loc)}\n\`\`\`\n\n`;
+            }\n\`\`\`marko\n${codeFrame(code, normalizeMessage(error.message), loc)}\n\`\`\`\n\n`;
           }
         }
 
@@ -162,6 +162,10 @@ function getDiagnosticSourcePriority(source: string | undefined) {
   if (source === "ts") return 1;
   if (source?.startsWith("axe-core")) return 2;
   return 3;
+}
+
+function normalizeMessage(message: string) {
+  return message.split(process.cwd()).join("<workspace>");
 }
 
 // if (SHOULD_BENCH) {

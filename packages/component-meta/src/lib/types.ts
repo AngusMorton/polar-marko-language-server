@@ -1,9 +1,3 @@
-import type ts from "typescript";
-
-export type TagMetaChecker = ReturnType<
-  (typeof import("./checker"))["createCheckerBase"]
->;
-
 export interface Declaration {
   file: string;
   range: [number, number];
@@ -44,8 +38,4 @@ export interface TagMeta {
   inputs: InputMeta[];
   attrTags: AttrTagMeta[];
   body?: BodyMeta;
-}
-
-export interface MetaCheckerOptions {
-  printer?: ts.PrinterOptions;
 }

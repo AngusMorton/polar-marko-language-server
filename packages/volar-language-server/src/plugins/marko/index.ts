@@ -1,3 +1,4 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import type {
   LanguageServicePlugin,
   LanguageServicePluginInstance,
@@ -5,7 +6,6 @@ import type {
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
 
-import { MarkoVirtualCode } from "../../language";
 import { provideValidations } from "./validate";
 // import { provideDocumentSymbols } from "./document-symbols";
 

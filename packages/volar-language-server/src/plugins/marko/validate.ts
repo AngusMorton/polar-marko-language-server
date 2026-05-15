@@ -1,8 +1,7 @@
 import type { Config } from "@marko/compiler";
 import { DiagnosticType } from "@marko/compiler/babel-utils";
+import { MarkoVirtualCode } from "@marko/language-core";
 import { Diagnostic, DiagnosticSeverity } from "vscode-languageserver";
-
-import { MarkoVirtualCode } from "../../language";
 
 const markoErrorRegExp =
   /^(.+?)\.marko(?:\((\d+)(?:\s*,\s*(\d+))?\))?: (.*)$/gm;

@@ -1,357 +1,66 @@
-# Current Goal
+# Component Meta Integration Status
 
-Integrate the new `@marko/component-meta` workspace package into `packages/volar-language-server` so that the Volar-based Marko template experience can use structured Marko-native metadata for custom tags and custom tag inputs.
+The `@marko/component-meta` package is integrated into `packages/volar-language-server` for the `marko-template` plugin.
 
-The intended outcome is:
+## Current Implementation
 
-- custom tag hover should include richer Marko-native metadata
-- custom tag attribute hover should include richer input metadata
-- custom tag completion documentation should include richer metadata
-- custom tag attribute completion documentation should include richer metadata
-- existing definition/navigation ownership should remain unchanged
-- all existing tests should continue to pass
+- Custom tag and custom input completion docs use component metadata.
+- Custom tag and custom input hover docs use component metadata where it improves the result.
+- Custom input definitions use component metadata declarations as an additive fallback after TS/taglib navigation.
+- Native HTML completions and hover continue to prefer the HTML service where possible.
+- Marko-specific source completions remain responsible for syntax the HTML service cannot model, including attr tags and modifiers.
+- Source completion edits are normalized across Volar embedded-document requests so `textEdit` is preserved.
+- Component metadata is cached per request session and enriched tag data is cached per `MarkoVirtualCode`.
 
-This work is specifically scoped to enriching documentation/completion metadata. It is not intended to replace the existing TS/codegen-backed definition flow or compiler diagnostics flow.
+## Performance Validation
 
-# Design Intent
+A manual LSP performance harness now exists at:
 
-The intended architecture for this integration is:
+- `packages/volar-language-server/src/__perf__/performance.test.ts`
 
-- `@marko/component-meta` remains a standalone shared package
-- `marko-template` in `packages/volar-language-server` consumes component metadata
-- metadata is used only to enrich hover/completion/data-provider docs for custom tags and inputs
-- HTML-native tags should continue to rely on the HTML service / existing taglib data
-- TS/codegen-backed navigation should remain the owner for definition/reference style features
-- source-aware Marko completions should continue to own syntax that HTML/TS cannot model well
+Run it with:
 
-The concrete goal inside the Volar plugin is to make `marko-template` the place where component metadata is attached to:
-
-- HTML-backed tag docs
-- source fallback tag hover
-- source fallback attribute hover
-- source attribute completions
-- HTML data-provider output for custom tags/attrs
-
-# What Was Already True Before This Integration Work
-
-Before this round of work started, the following was already complete and green:
-
-- `packages/component-meta` had been created and implemented
-- local `component-meta` build/test was green
-- full root workspace build was green
-- the earlier `marko-template` vs `marko` plugin split was already done
-- `marko-template` already owned template completions / hover / definition / document links / document symbols
-- `marko` already only owned diagnostics
-- `packages/volar-language-server` had already been fully green after the earlier refactor
-
-# Detailed Progress In This Session
-
-## 1. Added `component-meta` integration primitives to `marko-template`
-
-New files added:
-
-- `packages/volar-language-server/src/plugins/marko-template/component-meta.ts`
-- `packages/volar-language-server/src/plugins/marko-template/documentation.ts`
-
-### `component-meta.ts`
-
-This file introduces a lightweight project-scoped metadata manager.
-
-It currently does the following:
-
-- imports `createChecker` / `createCheckerByJson` from `@marko/component-meta`
-- caches checkers by inferred project key
-- tries to resolve a nearby `tsconfig.json` or `jsconfig.json`
-- falls back to an inferred in-memory config when no TS config is found
-- updates the checker with the current in-memory Marko document text on every `prepare(root)` call
-- exposes a session API:
-  - `getTagMetaForTag(tagName)`
-  - `getInputMetaForTag(tagName, attrName)`
-
-### `documentation.ts`
-
-This file introduces common Markdown formatting helpers for metadata:
-
-- `formatTagMetaDocumentation(...)`
-- `formatInputMetaDocumentation(...)`
-
-It currently formats:
-
-- top-level input summaries
-- attr tag summaries
-- body signatures
-- input signatures and enum values
-
-## 2. Wired component metadata into the HTML data provider
-
-Updated file:
-
-- `packages/volar-language-server/src/plugins/marko-template/data-provider.ts`
-
-Changes made:
-
-- `createMarkoDataProvider(...)` now optionally accepts a `MarkoComponentMetaManager`
-- the provider prepares a metadata session for the current root document
-- tag docs now append metadata-derived sections
-- attribute docs now use metadata-derived input signatures when available
-- metadata enum values are used for value docs when present
-- custom tag inputs that are missing from taglib attribute enumeration are now synthesized into the provider output
-
-This last part mattered because real custom tag fixtures like `fancy-button` only exposed wildcard/core attrs through taglib lookup, while the actual author-facing input `message` existed only in component metadata.
-
-## 3. Wired component metadata into hover handling
-
-Updated file:
-
-- `packages/volar-language-server/src/plugins/marko-template/hover.ts`
-
-Changes made:
-
-- `provideHover(...)` now accepts an optional metadata session
-- source fallback hover now uses metadata for custom tags
-- source fallback hover now uses metadata for custom tag attrs
-- HTML tag hover continues to use existing HTML/taglib behavior
-- modifier hover behavior remains intact
-
-Current status of hover integration:
-
-- custom tag hover from component meta is working
-- custom attr hover from component meta is working
-- existing native HTML / modifier hover tests still pass
-
-## 4. Wired component metadata into source attr completions
-
-Updated files:
-
-- `packages/volar-language-server/src/plugins/marko-template/source-completions.ts`
-- `packages/volar-language-server/src/plugins/marko/complete/AttrName.ts`
-
-Changes made:
-
-- source-only completions now receive the metadata session
-- `AttrName(...)` now accepts optional `tagMeta`
-- attribute completion docs now use metadata-derived input signatures when available
-- metadata-only custom inputs missing from taglib enumeration are synthesized into source attr completions
-
-This made local/source completion generation for custom attrs work in isolation.
-
-## 5. Wired the manager into the template plugin entrypoint
-
-Updated files:
-
-- `packages/volar-language-server/src/plugins/marko-template/index.ts`
-- `packages/volar-language-server/src/plugins/marko-template/html-service.ts`
-
-Changes made:
-
-- `createComponentMetaManager(ts)` is now created in the `marko-template` plugin
-- the HTML service now receives the metadata manager
-- completion path prepares a metadata session per request
-- hover path prepares a metadata session per request
-
-## 6. Added tests for the new metadata behavior
-
-Updated tests:
-
-- `packages/volar-language-server/src/plugins/marko-template/__tests__/data-provider.test.ts`
-- `packages/volar-language-server/src/__tests__/completion.test.ts`
-- `packages/volar-language-server/src/__tests__/navigation.test.ts`
-
-Added assertions cover:
-
-- custom tag docs enriched with metadata in the HTML data provider
-- custom input docs enriched with metadata in the HTML data provider
-- custom tag hover enriched with metadata
-- custom custom-tag attr hover enriched with metadata
-- custom tag input completion docs from component meta
-
-## 7. Added workspace/package wiring
-
-Updated files:
-
-- `packages/volar-language-server/package.json`
-- `packages/volar-language-server/tsconfig.json`
-
-Changes made:
-
-- added `@marko/component-meta` as a dependency in `packages/volar-language-server/package.json`
-- added a TS project reference from `volar-language-server` to `component-meta`
-- ran `npm install` to update workspace linking and lockfile state
-
-# Verification Performed So Far
-
-## Build / install steps completed
-
-These succeeded:
-
-- `npm install`
-- `npm run build -w @marko/component-meta`
 - `npm run build -w @marko/volar-language-server`
+- `npm run perf -w @marko/volar-language-server`
 
-## Component-meta package verification
+It measures repeated hover, completion, and definition requests through `@volar/test-utils` and prints min/median/p95/max/mean timings. Optional thresholding is available with `MARKO_PERF_MAX_P95_MS`.
 
-This succeeded:
+## Performance Measurements
 
-- `npm run test -w @marko/component-meta`
+Repeated-request benchmark, 30 iterations after 5 warmups:
 
-Result:
+| Step                              | custom-tag-hover median / p95 | custom-input-completion median / p95 | native-attr-completion median / p95 | custom-tag-definition median / p95 |
+| --------------------------------- | ----------------------------- | ------------------------------------ | ----------------------------------- | ---------------------------------- |
+| Baseline                          | 672.91ms / 804.27ms           | 0.90ms / 1.17ms                      | 8.29ms / 29.95ms                    | 0.97ms / 1.45ms                    |
+| `updateFile` unchanged-text no-op | 502.93ms / 616.15ms           | 0.90ms / 1.58ms                      | 8.57ms / 20.22ms                    | 0.97ms / 1.35ms                    |
+| Enriched tag-data cache           | 1.23ms / 33.50ms              | 0.87ms / 1.07ms                      | 8.30ms / 20.89ms                    | 0.96ms / 1.32ms                    |
+| Patched-host reuse refinements    | 1.11ms / 27.54ms              | 0.88ms / 1.25ms                      | 8.49ms / 20.25ms                    | 0.98ms / 1.42ms                    |
 
-- `6 passing`
+The original hover hang was caused by repeated eager metadata enrichment rebuilding or recomputing too much work. The local caching changes bring warm hover requests back to low single-digit milliseconds.
 
-## Targeted server verification
+## Component Meta Cache Tests
 
-Repeated targeted runs were executed with:
+`packages/component-meta/src/__tests__/checker.test.ts` now verifies:
 
-- `npm run test -w @marko/volar-language-server -- --grep "marko-template data provider|completion|navigation"`
+- repeated metadata reads reuse the cached program
+- unchanged `updateFile` calls do not recreate the program
 
-Current targeted result:
+## Vue Language Tools Comparison
 
-- most of the new metadata integration is working
-- custom tag hover test is green
-- custom custom-tag attr hover test is green
-- custom tag input completion metadata test is now green
-- HTML data-provider enrichment test is green
-- one pre-existing attr-completion shape expectation is now regressed
+Vue has two layers:
 
-# Current Exact State Of The Code
+- standalone component-meta checker for CLI/offline usage
+- IDE metadata requests backed by the existing tsserver/Volar program
 
-## Working
+Marko currently still uses the standalone checker from the LSP. The local caching work makes this practical for warm requests, but the long-term Vue-aligned architecture should extract shared Marko language-core primitives and add a TS-plugin metadata request path that can use the live Volar/TS program.
 
-The following now work:
+## Recommended Follow-Up
 
-- metadata manager creation and checker caching
-- metadata formatting helpers
-- HTML data-provider enrichment for custom tags
-- HTML data-provider synthesis of metadata-only custom inputs
-- custom tag hover from component meta
-- custom custom-tag attr hover from component meta
-- source attr completion generation for metadata-only custom inputs in isolated/unit path
-- completion test for custom tag input docs from component meta
+Create a shared `@marko/language-core` package or equivalent internal layer that both `@marko/component-meta` and `@marko/volar-language-server` can use for:
 
-## Current Remaining Regression
+- Marko virtual-file creation
+- source/virtual range mapping
+- tag-file resolution
+- component metadata extraction from an existing `ts.Program`
 
-There is currently one known failing test in `packages/volar-language-server`:
-
-- file: `packages/volar-language-server/src/__tests__/completion.test.ts`
-- test: `provides attribute name completions with snippets`
-
-Current failure details:
-
-- expected: `getNewText(item) === "class"`
-- actual: `getNewText(item) === undefined`
-
-This regression appeared after changing script completion mapping ownership for Marko attribute-name tokens.
-
-## Why That Regression Happened
-
-The custom-tag input metadata completion problem was caused by embedded-script TypeScript completions winning over `marko-template` source attr completions.
-
-To fix that, `packages/volar-language-server/src/language/parseScript.ts` was changed so that generated script mappings for source `AttrName` tokens no longer expose `completion: true`.
-
-That change successfully fixed the custom-tag metadata completion case, but it also changed how unresolved attr-name completion items flow back through Volar transport for normal attrs.
-
-Observed current behavior for the failing standard attr completion case:
-
-- the `class?` completion item is still returned
-- the item still contains the expected replacement edit, but it is currently stored inside `item.data.original.textEdit`
-- the top-level `item.textEdit` is missing in the unresolved result returned by the server
-- the existing test helper reads `item.textEdit?.newText`, so it now sees `undefined`
-
-This means the remaining issue is not that the completion disappeared. The remaining issue is that unresolved source completions on the embedded-document path are not being normalized back to top-level `textEdit` before the response is returned.
-
-# Important Intermediate Debugging Findings
-
-## Finding: custom tag inputs are not always visible through taglib attr enumeration
-
-For the `tags-api-basic` fixture, runtime inspection showed:
-
-- `root.tagLookup.getTag("fancy-button")` resolves correctly
-- `root.tagLookup.forEachAttribute("fancy-button", ...)` only exposes wildcard/core attrs
-- the actual input `message` only appears in component metadata
-
-This is why synthetic metadata-only attrs had to be appended in both:
-
-- `data-provider.ts`
-- `marko/complete/AttrName.ts`
-
-## Finding: custom-tag completion docs were being lost because TS completions won the merge
-
-Live server inspection showed that for `<fancy-button mess█/>`:
-
-- the visible `message` completion was coming from embedded TypeScript
-- the unresolved item had no docs body
-- resolved item had `detail: "(property) Input.message: string"` but empty markdown doc body
-
-This was why the first custom metadata completion assertion failed even though local source-only generation was already correct.
-
-## Finding: source-only generation itself is correct
-
-Direct inspection of `provideSourceOnlyCompletions(...)` for `<fancy-button mess█/>` showed it returns:
-
-- a `message` completion item
-- with `documentation.value === "`message: string`"`
-- with a snippet edit of `message="$1"$0`
-
-So the remaining work is in transport/normalization/ownership, not metadata extraction.
-
-# Files Modified In This Session
-
-New files:
-
-- `packages/volar-language-server/src/plugins/marko-template/component-meta.ts`
-- `packages/volar-language-server/src/plugins/marko-template/documentation.ts`
-
-Modified files:
-
-- `packages/volar-language-server/package.json`
-- `packages/volar-language-server/tsconfig.json`
-- `packages/volar-language-server/src/plugins/marko-template/index.ts`
-- `packages/volar-language-server/src/plugins/marko-template/html-service.ts`
-- `packages/volar-language-server/src/plugins/marko-template/data-provider.ts`
-- `packages/volar-language-server/src/plugins/marko-template/hover.ts`
-- `packages/volar-language-server/src/plugins/marko-template/source-completions.ts`
-- `packages/volar-language-server/src/plugins/marko/complete/AttrName.ts`
-- `packages/volar-language-server/src/plugins/shared/marko-documents.ts`
-- `packages/volar-language-server/src/language/parseScript.ts`
-- `packages/volar-language-server/src/plugins/marko-template/__tests__/data-provider.test.ts`
-- `packages/volar-language-server/src/__tests__/completion.test.ts`
-- `packages/volar-language-server/src/__tests__/navigation.test.ts`
-
-# Current Recommended Next Steps
-
-There is one concrete remaining task to finish this integration cleanly:
-
-1. Normalize unresolved source attr completion items so the top-level response preserves `textEdit`.
-
-Likely good fix locations:
-
-- `packages/volar-language-server/src/plugins/marko-template/index.ts`
-- or `packages/volar-language-server/src/plugins/marko-template/util.ts`
-
-The desired behavior is:
-
-- when `marko-template` returns source completions from the embedded script completion path, keep the top-level `textEdit` on the returned item instead of only inside `item.data.original`
-- this should restore the existing `class?` snippet completion shape
-- while keeping the new custom-tag input metadata completion ownership fix intact
-
-After that, rerun verification in this order:
-
-1. `npm run build -w @marko/volar-language-server`
-2. `npm run test -w @marko/volar-language-server -- --grep "marko-template data provider|completion|navigation"`
-3. `npm run test -w @marko/volar-language-server`
-4. `npm run build`
-
-# Current Bottom Line
-
-The `component-meta` integration is mostly complete and working.
-
-The feature-level goal has been achieved for:
-
-- custom tag hover docs
-- custom custom-tag attr hover docs
-- HTML data-provider docs for custom tags and metadata-only inputs
-- custom tag input completion metadata
-
-The repo is not fully green yet because there is one remaining regression in ordinary attribute-name completion item shape, introduced while making `marko-template` own attr-name completion metadata for custom tags.
-
-This is the only known remaining blocker before full end-to-end verification can be declared green.
+Then move LSP component metadata requests from the standalone checker to a Vue-style TS-plugin request that reuses the live TypeScript program.

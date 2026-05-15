@@ -1,5 +1,11 @@
 import type { TagDefinition } from "@marko/compiler/babel-utils";
-import { type Extracted, Project } from "@marko/language-tools";
+import {
+  type Extracted,
+  extractScript,
+  parse,
+  Project,
+  ScriptLang,
+} from "@marko/language-tools";
 import path from "path";
 import type ts from "typescript";
 
@@ -89,6 +95,34 @@ export function extractTagMeta(
     attrTags,
     body,
   } satisfies TagMeta;
+}
+
+export function extractTagMetaFromProgram(
+  tsModule: typeof import("typescript"),
+  program: ts.Program,
+  fileName: string,
+  extracted?: Extracted,
+) {
+  fileName = normalizePath(fileName);
+  const virtualFileName = toVirtualFileName(fileName, program);
+  const sourceFile = fileName.endsWith(".marko")
+    ? (program.getSourceFile(virtualFileName) ??
+      program.getSourceFile(fileName))
+    : (program.getSourceFile(fileName) ??
+      program.getSourceFile(virtualFileName));
+
+  if (!sourceFile) {
+    return;
+  }
+
+  extracted ??= extractScriptFromProgramSource(tsModule, program, fileName);
+
+  return extractTagMeta(
+    tsModule,
+    program.getTypeChecker(),
+    sourceFile,
+    extracted,
+  );
 }
 
 export function getVisibleTagNames(importerFileName: string) {
@@ -497,6 +531,53 @@ function inferTagName(fileName: string) {
   }
 
   return base.replace(/(?:\.d)?\.marko$/, "");
+}
+
+function extractScriptFromProgramSource(
+  tsModule: typeof import("typescript"),
+  program: ts.Program,
+  fileName: string,
+) {
+  if (!fileName.endsWith(".marko")) {
+    return;
+  }
+
+  const sourceText = program.getSourceFile(fileName)?.text;
+  if (sourceText === undefined) {
+    return;
+  }
+
+  const parsed = parse(sourceText, fileName);
+  const dirname = path.dirname(fileName);
+  const scriptLang = Project.getScriptLang(
+    fileName,
+    ScriptLang.ts,
+    tsModule,
+    tsModule.sys,
+  );
+
+  return extractScript({
+    parsed,
+    scriptLang,
+    lookup: Project.getTagLookup(dirname),
+    ts: tsModule,
+    translator: Project.getConfig(dirname).translator,
+  });
+}
+
+function toVirtualFileName(fileName: string, program: ts.Program) {
+  if (!fileName.endsWith(".marko")) {
+    return fileName;
+  }
+
+  for (const extension of [".ts", ".js", ".mts", ".mjs", ".cts", ".cjs"]) {
+    const virtualFileName = `${fileName}${extension}`;
+    if (program.getSourceFile(virtualFileName)) {
+      return virtualFileName;
+    }
+  }
+
+  return `${fileName}.ts`;
 }
 
 function shouldSkipTag(tag: TagDefinition) {

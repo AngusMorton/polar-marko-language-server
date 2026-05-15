@@ -1,4 +1,5 @@
 import type { TagDefinition } from "@marko/compiler/babel-utils";
+import { MarkoVirtualCode } from "@marko/language-core";
 import {
   getLines,
   getLocation,
@@ -10,7 +11,6 @@ import fs from "fs";
 import path from "path";
 import { URI } from "vscode-uri";
 
-import { MarkoVirtualCode } from "../../../language";
 import { START_LOCATION } from "../../../utils/constants";
 import RegExpBuilder from "../../../utils/regexp-builder";
 

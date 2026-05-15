@@ -1,3 +1,4 @@
+import { addMarkoTypes, createMarkoLanguagePlugin } from "@marko/language-core";
 import { Project } from "@marko/language-tools";
 import { MessageType, ShowMessageNotification } from "@volar/language-server";
 import {
@@ -10,13 +11,19 @@ import path from "path";
 import type ts from "typescript/lib/tsserverlibrary";
 import { URI } from "vscode-uri";
 
-import { addMarkoTypes, createMarkoLanguagePlugin } from "./language";
 import { getLanguageServicePlugins } from "./plugins";
 
 const connection = createConnection();
 const server = createServer(connection);
 const bundledMarkoTypesFile = path.join(__dirname, "marko.runtime.d.ts");
 const notifiedBundledTypeFallback = new Set<string>();
+const pendingTsServerRequests = new Map<
+  number,
+  {
+    resolve(response: unknown): void;
+  }
+>();
+let tsServerRequestId = 0;
 
 connection.listen();
 
@@ -72,9 +79,22 @@ connection.onInitialize((params) => {
         },
       };
     }),
-    getLanguageServicePlugins(connection, typescript),
+    getLanguageServicePlugins(connection, typescript, sendTsServerRequest),
   );
 });
+
+connection.onNotification(
+  "tsserver/response",
+  ([id, response]: [number, unknown]) => {
+    const pending = pendingTsServerRequests.get(id);
+    if (!pending) {
+      return;
+    }
+
+    pendingTsServerRequests.delete(id);
+    pending.resolve(response);
+  },
+);
 
 connection.onInitialized(() => {
   server.initialized();
@@ -116,4 +136,17 @@ function notifyIfUsingBundledMarkoTypes(
       "Couldn't detect `marko` installed in this workspace. Falling back to the language server's bundled Marko types, which may not match your project.",
     type: MessageType.Warning,
   });
+}
+
+function sendTsServerRequest<T>(command: string, args: unknown) {
+  const id = ++tsServerRequestId;
+  const promise = new Promise<T>((resolve) => {
+    pendingTsServerRequests.set(id, {
+      resolve: (response) => resolve(response as T),
+    });
+  });
+
+  connection.sendNotification("tsserver/request", [id, command, args]);
+
+  return promise;
 }

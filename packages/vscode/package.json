@@ -123,6 +123,7 @@
     "workspaceContains:**/*.marko"
   ],
   "devDependencies": {
+    "@marko/language-core": "0.0.0",
     "@marko/volar-language-server": "^2.0.3",
     "@types/vscode": "^1.80.0",
     "@volar/language-server": "^2.4.14",

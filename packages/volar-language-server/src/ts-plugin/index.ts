@@ -1,7 +1,15 @@
+import {
+  extractTagMetaFromProgram,
+  resolveTagFile,
+} from "@marko/component-meta";
+import { addMarkoTypes, createMarkoLanguagePlugin } from "@marko/language-core";
 import { Project } from "@marko/language-tools";
 import { createLanguageServicePlugin } from "@volar/typescript/lib/quickstart/createLanguageServicePlugin.js";
 
-import { addMarkoTypes, createMarkoLanguagePlugin } from "../language";
+import {
+  getComponentMetaRequest,
+  type GetComponentMetaRequestArgs,
+} from "./requests";
 
 export const init = createLanguageServicePlugin((ts, info) => {
   const { languageServiceHost } = info;
@@ -15,6 +23,20 @@ export const init = createLanguageServicePlugin((ts, info) => {
     ],
     setup(_language) {
       addMarkoTypes(rootPath, ts, languageServiceHost);
+
+      info.session?.addProtocolHandler(getComponentMetaRequest, (request) => {
+        const args = request.arguments as GetComponentMetaRequestArgs;
+        const program = info.languageService.getProgram();
+        const fileName = resolveTagFile(args.fileName, args.tagName);
+
+        return {
+          response:
+            program && fileName
+              ? extractTagMetaFromProgram(ts, program, fileName)
+              : undefined,
+          responseRequired: true,
+        };
+      });
     },
   };
 });

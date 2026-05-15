@@ -1,8 +1,8 @@
+import type { MarkoVirtualCode } from "@marko/language-core";
 import { type Node, NodeType } from "@marko/language-tools";
 import type { Hover } from "@volar/language-service";
 import { MarkupKind } from "vscode-languageserver";
 
-import type { MarkoVirtualCode } from "../../language";
 import getTagNameCompletion from "../marko/util/get-tag-name-completion";
 import { isHTML } from "../marko/util/is-html";
 import type { MarkoComponentMetaSession } from "./component-meta";
@@ -131,19 +131,22 @@ function provideAttrHover(
     };
   }
 
-  const attrDef = root.tagLookup.getAttribute(tagName, attrName);
-  if (!attrDef) {
+  if (modifierIndex !== -1) {
     return;
   }
 
+  const attrDef = root.tagLookup.getAttribute(tagName, attrName);
   const inputMeta = componentMeta?.getInputMetaForTag(tagName, attrName);
+  if (!attrDef && !inputMeta) {
+    return;
+  }
 
-  const autocomplete = Array.isArray(attrDef.autocomplete)
+  const autocomplete = Array.isArray(attrDef?.autocomplete)
     ? attrDef.autocomplete[0]
-    : attrDef.autocomplete;
+    : attrDef?.autocomplete;
   let value = inputMeta
-    ? formatInputMetaDocumentation(inputMeta, attrDef.description)
-    : attrDef.description || "";
+    ? formatInputMetaDocumentation(inputMeta, attrDef?.description)
+    : attrDef?.description || "";
 
   if (autocomplete?.description) {
     value += value

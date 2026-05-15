@@ -47,10 +47,14 @@ export function parseScripts(
     const sourceEnd = token.sourceStart + token.length;
     const key = `${token.sourceStart}:${token.length}`;
     const sourceText = parsed.code.slice(token.sourceStart, sourceEnd);
-    const sourceNode = parsed.nodeAt(token.sourceStart);
+    const sourceNode = parsed.nodeAt(
+      token.sourceStart + Math.min(1, Math.max(0, token.length - 1)),
+    );
     const isPrimary = firstGeneratedBySource.get(key) === token.generatedStart;
     const shouldUseSourceAttrCompletions =
-      sourceNode?.type === NodeType.AttrName;
+      sourceNode?.type === NodeType.AttrName &&
+      sourceNode.parent.parent.type === NodeType.Tag &&
+      isCustomTag(sourceNode.parent.parent.nameText || "", tagLookup);
 
     // Container tokens can cover later, more precise source tokens. If both are
     // semantic, Volar may prefer the wrapper expression over the real source
@@ -141,4 +145,9 @@ export function parseScripts(
   }
 
   return [];
+}
+
+function isCustomTag(tagName: string, tagLookup: TaglibLookup) {
+  const tag = tagName && tagLookup.getTag(tagName);
+  return !!tag && !tag.html;
 }

@@ -7,16 +7,21 @@ import { create as createAccessibilityService } from "./marko-accessibility";
 import { create as createMarkoFormatActionService } from "./marko-action-format";
 import { create as createMarkoDebugService } from "./marko-debug";
 import { create as createMarkoTemplateService } from "./marko-template";
+import {
+  createMarkoTsServer,
+  type SendTsServerRequest,
+} from "./marko-template/tsserver";
 import { createMarkoPrettierService } from "./prettier";
 import { create as createTypeScriptServices } from "./typescript";
 
 export function getLanguageServicePlugins(
   connection: Connection,
   ts: typeof import("typescript"),
+  sendTsServerRequest: SendTsServerRequest,
 ) {
   const result = [
     createMarkoService(ts),
-    createMarkoTemplateService(ts),
+    createMarkoTemplateService(ts, createMarkoTsServer(sendTsServerRequest)),
     createCssService(),
     ...createTypeScriptServices(ts),
     createTypeScriptTwoSlashService(ts),

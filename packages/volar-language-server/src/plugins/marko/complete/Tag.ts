@@ -1,3 +1,4 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import { type Node, UNFINISHED } from "@marko/language-tools";
 import {
   CompletionItem,
@@ -5,8 +6,6 @@ import {
   InsertTextFormat,
   TextEdit,
 } from "vscode-languageserver";
-
-import { MarkoVirtualCode } from "../../../language";
 
 const partialCloseTagReg = /<\/(?:[^><]*>)?/iy;
 

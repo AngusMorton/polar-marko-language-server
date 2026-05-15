@@ -22,12 +22,14 @@ export function provideSourceOnlyCompletions(
 
   switch (node.type) {
     case NodeType.AttrName:
-      items = AttrName(
-        node,
-        root,
-        offset,
-        componentMeta?.getTagMetaForTag(node.parent.parent.nameText || ""),
-      );
+      if (shouldUseSourceAttrCompletions(node, root)) {
+        items = AttrName(
+          node,
+          root,
+          offset,
+          componentMeta?.getTagMetaForTag(node.parent.parent.nameText || ""),
+        );
+      }
       break;
     case NodeType.Import:
     case NodeType.Static:
@@ -58,4 +60,20 @@ export function provideSourceOnlyCompletions(
     isIncomplete: false,
     items,
   };
+}
+
+function shouldUseSourceAttrCompletions(
+  node: Extract<
+    NonNullable<MarkoTemplateContext["node"]>,
+    { type: NodeType.AttrName }
+  >,
+  root: MarkoTemplateContext["root"],
+) {
+  if (root.markoAst.read(node).includes(":")) {
+    return true;
+  }
+
+  const tagName = node.parent.parent.nameText || "";
+  const tag = tagName && root.tagLookup.getTag(tagName);
+  return !tag || !tag.html;
 }

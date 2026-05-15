@@ -1,4 +1,6 @@
 import type { TagDefinition } from "@marko/compiler/babel-utils";
+import type { MarkoVirtualCode } from "@marko/language-core";
+import type { LanguageServiceContext } from "@volar/language-service";
 import path from "path";
 import type {
   IAttributeData,
@@ -9,20 +11,29 @@ import type {
 } from "vscode-html-languageservice";
 import { URI } from "vscode-uri";
 
-import type { MarkoVirtualCode } from "../../language";
-import type { MarkoComponentMetaManager } from "./component-meta";
+import type {
+  MarkoComponentMetaManager,
+  MarkoComponentMetaSession,
+} from "./component-meta";
 import {
   formatInputMetaDocumentation,
   formatTagMetaDocumentation,
 } from "./documentation";
 
 const HTML_DATA_PROVIDER_ID = "marko-template";
+const enrichedTagDataCache = new WeakMap<
+  MarkoComponentMetaSession,
+  ITagData[]
+>();
 
 export function createMarkoDataProvider(
   root: MarkoVirtualCode,
   componentMetaManager?: MarkoComponentMetaManager,
+  context?: LanguageServiceContext,
+  preparedComponentMeta?: MarkoComponentMetaSession,
 ): IHTMLDataProvider {
-  const componentMeta = componentMetaManager?.prepare(root);
+  const componentMeta =
+    preparedComponentMeta ?? componentMetaManager?.prepare(root, context);
 
   return {
     getId: () => HTML_DATA_PROVIDER_ID,
@@ -37,8 +48,15 @@ export function createMarkoDataProvider(
 
 function getTagData(
   root: MarkoVirtualCode,
-  componentMeta?: ReturnType<MarkoComponentMetaManager["prepare"]>,
+  componentMeta?: MarkoComponentMetaSession,
 ): ITagData[] {
+  if (componentMeta) {
+    const cached = enrichedTagDataCache.get(componentMeta);
+    if (cached) {
+      return cached;
+    }
+  }
+
   const tags: ITagData[] = [];
 
   for (const tag of root.tagLookup.getTagsSorted()) {
@@ -57,13 +75,17 @@ function getTagData(
     });
   }
 
+  if (componentMeta) {
+    enrichedTagDataCache.set(componentMeta, tags);
+  }
+
   return tags;
 }
 
 function getAttributeData(
   root: MarkoVirtualCode,
   tagName: string,
-  componentMeta?: ReturnType<MarkoComponentMetaManager["prepare"]>,
+  componentMeta?: MarkoComponentMetaSession,
 ) {
   const attributes: IAttributeData[] = [];
   const seenNames = new Set<string>();
@@ -145,7 +167,7 @@ function getValueData(
   root: MarkoVirtualCode,
   tagName: string,
   attrName: string,
-  componentMeta?: ReturnType<MarkoComponentMetaManager["prepare"]>,
+  componentMeta?: MarkoComponentMetaSession,
 ) {
   const normalizedName = attrName.endsWith("?")
     ? attrName.slice(0, -1)

@@ -1,4 +1,4 @@
-import "../utils/project-defaults";
+import "./project-defaults";
 
 import type { TaglibLookup } from "@marko/compiler/babel-utils";
 import { extractHTML, parse, Project, ScriptLang } from "@marko/language-tools";
@@ -8,6 +8,7 @@ import {
   type LanguagePlugin,
   type VirtualCode,
 } from "@volar/language-core";
+import type {} from "@volar/typescript";
 import path from "path";
 import type ts from "typescript";
 
@@ -164,3 +165,7 @@ export class MarkoVirtualCode implements VirtualCode {
     this.embeddedCodes.push(...html);
   }
 }
+
+export { parseHtml } from "./parseHtml";
+export { parseScripts } from "./parseScript";
+export { parseStyles } from "./parseStyles";

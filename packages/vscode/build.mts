@@ -100,6 +100,9 @@ await Promise.all([
       {
         name: "marko-language-tools-fix",
         async setup(build) {
+          build.onResolve({ filter: /^@marko\/language-core$/ }, () => ({
+            path: path.join(thisDir, "../language-core/src/index.ts"),
+          }));
           build.onResolve({ filter: /^@marko\/language-tools$/ }, () => ({
             path: path.join(thisDir, "../language-tools/src/index.ts"),
           }));

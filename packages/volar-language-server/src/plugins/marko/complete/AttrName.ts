@@ -1,4 +1,5 @@
 import type { InputMeta, TagMeta } from "@marko/component-meta";
+import { MarkoVirtualCode } from "@marko/language-core";
 import type { Node } from "@marko/language-tools";
 import {
   type CompletionItem,
@@ -9,7 +10,6 @@ import {
   TextEdit,
 } from "vscode-languageserver";
 
-import { MarkoVirtualCode } from "../../../language";
 import { formatInputMetaDocumentation } from "../../marko-template/documentation";
 
 export function AttrName(

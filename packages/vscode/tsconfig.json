@@ -8,6 +8,7 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "references": [
+    { "path": "../language-core" },
     { "path": "../volar-language-server" },
     { "path": "../language-tools" }
   ]

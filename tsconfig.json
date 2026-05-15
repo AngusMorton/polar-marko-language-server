@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/language-tools" },
+    { "path": "./packages/language-core" },
     { "path": "./packages/component-meta" },
     { "path": "./packages/language-server" },
     { "path": "./packages/type-check" },

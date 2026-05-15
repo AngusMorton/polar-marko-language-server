@@ -1,7 +1,7 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import { NodeType } from "@marko/language-tools";
 import { Hover } from "vscode-languageserver";
 
-import { MarkoVirtualCode } from "../../../language";
 import { OpenTagName } from "./OpenTagName";
 
 export function provideHover(

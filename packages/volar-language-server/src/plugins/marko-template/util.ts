@@ -1,3 +1,4 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import { NodeType } from "@marko/language-tools";
 import type {
   CompletionContext,
@@ -11,10 +12,10 @@ import { transformCompletionItem } from "@volar/language-service";
 import { convertCompletionInfo } from "volar-service-typescript/lib/utils/lspConverters";
 import { URI } from "vscode-uri";
 
-import { MarkoVirtualCode } from "../../language";
 import {
   getEmbeddedDocument,
   getGeneratedPosition,
+  getGeneratedRange,
   resolveMarkoCode,
   resolveSourceMarkoOffset,
 } from "../shared/marko-documents";
@@ -122,6 +123,43 @@ export async function provideHtmlCompletionItems(
   }
 
   return list;
+}
+
+export function transformSourceCompletionList(
+  context: LanguageServiceContext,
+  sourceUri: URI,
+  embeddedDocumentUri: string,
+  sourceDocument: TextDocument,
+  list: CompletionList | undefined,
+) {
+  if (!list) {
+    return;
+  }
+
+  const decoded = context.decodeEmbeddedDocumentUri(
+    URI.parse(embeddedDocumentUri),
+  );
+  const embeddedCodeId = decoded?.[1];
+  if (!embeddedCodeId) {
+    return list;
+  }
+
+  const embedded = getEmbeddedDocument(context, sourceUri, embeddedCodeId);
+  if (!embedded) {
+    return list;
+  }
+
+  return {
+    ...list,
+    items: list.items.map((item) =>
+      transformCompletionItem(
+        item,
+        (range) => getGeneratedRange(context, sourceUri, embeddedCodeId, range),
+        sourceDocument,
+        context,
+      ),
+    ),
+  } satisfies CompletionList;
 }
 
 export function provideScriptTagSymbolCompletions(

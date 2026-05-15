@@ -1,7 +1,7 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import { type Node, NodeType } from "@marko/language-tools";
 import { CompletionItem, TextEdit } from "vscode-languageserver";
 
-import { MarkoVirtualCode } from "../../../language";
 import getTagNameCompletion from "../util/get-tag-name-completion";
 
 const staticImportReg = /^\s*(?:static|client|server) import\b/;

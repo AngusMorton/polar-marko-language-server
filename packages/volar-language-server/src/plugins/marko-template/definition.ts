@@ -1,3 +1,4 @@
+import type { MarkoVirtualCode } from "@marko/language-core";
 import {
   getLines,
   getLocation,
@@ -13,9 +14,9 @@ import path from "path";
 import type ts from "typescript";
 import { URI } from "vscode-uri";
 
-import type { MarkoVirtualCode } from "../../language";
 import { START_LOCATION } from "../../utils/constants";
 import RegExpBuilder from "../../utils/regexp-builder";
+import type { MarkoComponentMetaSession } from "./component-meta";
 import { getScriptCompletionDocument } from "./util";
 
 export function provideDefinition(
@@ -23,6 +24,7 @@ export function provideDefinition(
   root: MarkoVirtualCode,
   offset: number,
   node: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
+  componentMeta?: MarkoComponentMetaSession,
 ): LocationLink[] | undefined {
   const tsDefinitions = provideTypeScriptDefinition(context, root, offset);
   if (tsDefinitions?.length) {
@@ -35,7 +37,7 @@ export function provideDefinition(
 
   switch (node.type) {
     case NodeType.AttrName:
-      return provideAttrDefinition(node, root);
+      return provideAttrDefinition(node, root, componentMeta);
     case NodeType.OpenTagName:
       return provideTagDefinition(node, root);
     default:
@@ -136,15 +138,22 @@ function rangeFromTextSpan(
 function provideAttrDefinition(
   node: Node.AttrName,
   root: MarkoVirtualCode,
+  componentMeta?: MarkoComponentMetaSession,
 ): LocationLink[] | undefined {
   const tagName = node.parent.parent.nameText || "";
   const rawAttrName = root.markoAst.read(node);
   const attrName = rawAttrName.split(":", 1)[0]!;
+  const metaDefinitions = componentMeta
+    ?.getInputMetaForTag(tagName, attrName)
+    ?.declarations.map((declaration) =>
+      declarationToLocationLink(declaration, root.markoAst.locationAt(node)),
+    )
+    .filter((link): link is LocationLink => !!link);
   const tagDef = tagName ? root.tagLookup.getTag(tagName) : undefined;
   const attrDef = root.tagLookup.getAttribute(tagName, attrName);
 
   if (!attrDef) {
-    return;
+    return metaDefinitions?.length ? metaDefinitions : undefined;
   }
 
   const attrEntryFile =
@@ -175,14 +184,43 @@ function provideAttrDefinition(
     }
   }
 
-  return [
-    {
-      targetUri: URI.file(attrEntryFile).toString(),
-      targetRange: range,
-      targetSelectionRange: range,
-      originSelectionRange: root.markoAst.locationAt(node),
-    },
-  ];
+  const taglibDefinition = {
+    targetUri: URI.file(attrEntryFile).toString(),
+    targetRange: range,
+    targetSelectionRange: range,
+    originSelectionRange: root.markoAst.locationAt(node),
+  } satisfies LocationLink;
+
+  return metaDefinitions?.length
+    ? [...metaDefinitions, taglibDefinition]
+    : [taglibDefinition];
+}
+
+function declarationToLocationLink(
+  declaration: MarkoComponentMetaSession extends never
+    ? never
+    : NonNullable<
+        ReturnType<MarkoComponentMetaSession["getInputMetaForTag"]>
+      >["declarations"][number],
+  originSelectionRange: LocationLink["originSelectionRange"],
+): LocationLink | undefined {
+  if (!path.isAbsolute(declaration.file) || !fs.existsSync(declaration.file)) {
+    return;
+  }
+
+  const source = fs.readFileSync(declaration.file, "utf-8");
+  const range = getLocation(
+    getLines(source),
+    declaration.range[0],
+    declaration.range[1],
+  );
+
+  return {
+    targetUri: URI.file(declaration.file).toString(),
+    targetRange: range,
+    targetSelectionRange: range,
+    originSelectionRange,
+  } satisfies LocationLink;
 }
 
 function provideTagDefinition(

@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 
+import { MarkoVirtualCode } from "@marko/language-core";
 import { Project } from "@marko/language-tools";
 import path from "path";
 import ts from "typescript";
-
-import { MarkoVirtualCode } from "../../../../language";
 
 const FIXTURE_DIR = path.join(__dirname, "../../../../__tests__/fixtures");
 

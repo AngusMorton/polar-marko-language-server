@@ -1,3 +1,4 @@
+import type { MarkoVirtualCode } from "@marko/language-core";
 import { NodeType } from "@marko/language-tools";
 import type {
   CompletionItem,
@@ -23,6 +24,7 @@ import { provideDefinition } from "./definition";
 import { provideHover } from "./hover";
 import { createMarkoHtmlService } from "./html-service";
 import { provideSourceOnlyCompletions } from "./source-completions";
+import type { MarkoTsServer } from "./tsserver";
 import {
   getMarkoCompletionData,
   getScriptCompletionDocument,
@@ -31,12 +33,14 @@ import {
   provideHtmlCompletionItems,
   provideScriptTagSymbolCompletions,
   resolveMarkoTemplateContext,
+  transformSourceCompletionList,
 } from "./util";
 
 export const create = (
   ts: typeof import("typescript"),
+  tsserver: MarkoTsServer,
 ): LanguageServicePlugin => {
-  const componentMeta = createComponentMetaManager(ts);
+  const componentMeta = createComponentMetaManager(tsserver);
   const htmlService = createMarkoHtmlService(componentMeta);
   const baseService = htmlService.baseService;
 
@@ -87,14 +91,29 @@ export const create = (
             return;
           }
 
-          htmlService.updateCustomData(templateContext.root);
           const componentMetaSession = componentMeta.prepare(
             templateContext.root,
+            context,
+          );
+          await componentMetaSession.preloadTags(
+            getRelevantTagNames(templateContext.root, templateContext.node),
+          );
+          htmlService.updateCustomData(
+            templateContext.root,
+            context,
+            componentMetaSession,
           );
 
           const sourceOnlyCompletion = provideSourceOnlyCompletions(
             templateContext,
             componentMetaSession,
+          );
+          const transformedSourceOnlyCompletion = transformSourceCompletionList(
+            context,
+            templateContext.sourceUri,
+            document.uri,
+            templateContext.document,
+            sourceOnlyCompletion,
           );
 
           const htmlCompletion = isOpenTagNameCompletionContext(templateContext)
@@ -130,12 +149,12 @@ export const create = (
             : undefined;
 
           return mergeCompletionLists(
-            sourceOnlyCompletion,
+            transformedSourceOnlyCompletion,
             tagSymbolCompletion,
             htmlCompletion,
           );
         },
-        provideDefinition(document, position) {
+        async provideDefinition(document, position) {
           const templateContext = resolveMarkoTemplateContext(
             context,
             document,
@@ -145,11 +164,20 @@ export const create = (
             return;
           }
 
+          const componentMetaSession = componentMeta.prepare(
+            templateContext.root,
+            context,
+          );
+          await componentMetaSession.preloadTags(
+            getRelevantTagNames(templateContext.root, templateContext.node),
+          );
+
           return provideDefinition(
             context,
             templateContext.root,
             templateContext.offset,
             templateContext.node,
+            componentMetaSession,
           );
         },
         async provideHover(document, position) {
@@ -162,27 +190,18 @@ export const create = (
             return;
           }
 
-          htmlService.updateCustomData(templateContext.root);
           const componentMetaSession = componentMeta.prepare(
             templateContext.root,
+            context,
           );
-
-          const attrNode =
-            templateContext.node?.type === NodeType.AttrName
-              ? templateContext.node
-              : undefined;
-          const attrName =
-            attrNode && templateContext.root.markoAst.read(attrNode);
-          if (
-            attrName?.endsWith(":scoped") ||
-            attrName?.endsWith(":no-update")
-          ) {
-            return provideHover(
-              templateContext,
-              undefined,
-              componentMetaSession,
-            );
-          }
+          await componentMetaSession.preloadTags(
+            getRelevantTagNames(templateContext.root, templateContext.node),
+          );
+          htmlService.updateCustomData(
+            templateContext.root,
+            context,
+            componentMetaSession,
+          );
 
           if (!shouldUseHtmlHover(templateContext)) {
             return provideHover(
@@ -212,7 +231,18 @@ export const create = (
             return;
           }
 
-          htmlService.updateCustomData(templateContext.root);
+          const componentMetaSession = componentMeta.prepare(
+            templateContext.root,
+            context,
+          );
+          await componentMetaSession.preloadTags(
+            getRelevantTagNames(templateContext.root),
+          );
+          htmlService.updateCustomData(
+            templateContext.root,
+            context,
+            componentMetaSession,
+          );
           return (
             (await baseServiceInstance.provideDocumentLinks?.(
               document,
@@ -233,7 +263,18 @@ export const create = (
             return;
           }
 
-          htmlService.updateCustomData(templateContext.root);
+          const componentMetaSession = componentMeta.prepare(
+            templateContext.root,
+            context,
+          );
+          await componentMetaSession.preloadTags(
+            getRelevantTagNames(templateContext.root),
+          );
+          htmlService.updateCustomData(
+            templateContext.root,
+            context,
+            componentMetaSession,
+          );
           return (
             (await baseServiceInstance.provideDocumentSymbols?.(
               document,
@@ -388,4 +429,25 @@ function shouldUseHtmlHover(
   }
 
   return !/^[A-Z]/.test(targetNode.parent.nameText || "");
+}
+
+function getRelevantTagNames(
+  root: MarkoVirtualCode,
+  node?: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
+) {
+  const tagName =
+    node?.type === NodeType.AttrName
+      ? node.parent.parent.nameText
+      : node?.type === NodeType.OpenTagName
+        ? node.parent.nameText
+        : undefined;
+
+  if (tagName) {
+    return [tagName];
+  }
+
+  return root.tagLookup
+    .getTagsSorted()
+    .filter((tag) => !tag.html)
+    .map((tag) => tag.name);
 }

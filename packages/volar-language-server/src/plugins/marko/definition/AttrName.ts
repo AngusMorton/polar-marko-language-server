@@ -1,9 +1,9 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import { getLines, getLocation, type Node } from "@marko/language-tools";
 import type { LocationLink } from "@volar/language-service";
 import fs from "fs";
 import { URI } from "vscode-uri";
 
-import { MarkoVirtualCode } from "../../../language";
 import { START_LOCATION } from "../../../utils/constants";
 import RegExpBuilder from "../../../utils/regexp-builder";
 

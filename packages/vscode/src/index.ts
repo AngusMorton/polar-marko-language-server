@@ -60,6 +60,25 @@ export async function activate(
     clientOptions,
   );
   await client.start();
+  context.subscriptions.push(
+    client.onNotification(
+      "tsserver/request",
+      ([id, command, args]: [number, string, unknown]) => {
+        vscode.commands
+          .executeCommand<
+            { body?: unknown } | undefined
+          >("typescript.tsserverRequest", command, args, { isAsync: true, lowPriority: true })
+          .then(
+            (response) =>
+              client.sendNotification("tsserver/response", [
+                id,
+                response?.body,
+              ]),
+            () => client.sendNotification("tsserver/response", [id, undefined]),
+          );
+      },
+    ),
+  );
 
   // support for auto close tag
   activateAutoInsertion("marko", client);

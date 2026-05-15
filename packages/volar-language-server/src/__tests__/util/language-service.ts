@@ -1,13 +1,19 @@
+import {
+  extractTagMetaFromProgram,
+  resolveTagFile,
+} from "@marko/component-meta";
 import { Project } from "@marko/language-tools";
 import { LanguageServerHandle, startLanguageServer } from "@volar/test-utils";
 import fs from "fs";
 import path from "path";
 import ts from "typescript";
 import * as protocol from "vscode-languageserver-protocol/node";
+import { URI } from "vscode-uri";
 
-const rootDir = process.cwd();
+const rootDir = path.resolve(__dirname, "../fixtures");
 
 let serverHandle: LanguageServerHandle | undefined;
+let languageService: TestLanguageService | undefined;
 
 Project.setDefaultTypePaths({
   internalTypesFile:
@@ -17,7 +23,7 @@ Project.setDefaultTypePaths({
 
 export async function getLanguageServer() {
   // Use the fixtures directory as the workspace root for proper type resolution
-  const fixturesDir = path.resolve(rootDir, "./__tests__/fixtures/");
+  const fixturesDir = rootDir;
   const capabilities: protocol.ClientCapabilities = {
     textDocument: {
       completion: {
@@ -52,6 +58,32 @@ export async function getLanguageServer() {
     const tsdkPath = path.dirname(
       require.resolve("typescript/lib/typescript.js"),
     );
+    languageService = createTestLanguageService(fixturesDir, compilerOptions);
+    serverHandle.connection.onNotification(
+      "tsserver/request",
+      ([id, command, args]: [
+        number,
+        string,
+        { fileName: string; tagName: string },
+      ]) => {
+        if (command !== "_marko:getComponentMeta") {
+          return serverHandle?.connection.sendNotification(
+            "tsserver/response",
+            [id, undefined],
+          );
+        }
+
+        const program = languageService?.service.getProgram();
+        const fileName = resolveTagFile(args.fileName, args.tagName);
+        return serverHandle?.connection.sendNotification("tsserver/response", [
+          id,
+          program && fileName
+            ? extractTagMetaFromProgram(ts, program, fileName)
+            : undefined,
+        ]);
+      },
+    );
+
     // Initialize the server with the fixtures directory as the root workspace
     await serverHandle.initialize(
       fixturesDir,
@@ -60,6 +92,7 @@ export async function getLanguageServer() {
       },
       capabilities,
     );
+    syncTestLanguageServiceDocuments(serverHandle, languageService);
 
     // Ensure that our first test does not suffer from a TypeScript overhead
     await serverHandle.sendCompletionRequest(
@@ -79,7 +112,14 @@ export async function shutdownLanguageServer() {
   await serverHandle.shutdown();
   serverHandle.connection.sendNotification(protocol.ExitNotification.type);
   serverHandle = undefined;
+  languageService = undefined;
 }
+
+type TestLanguageService = {
+  service: ts.LanguageService;
+  closeScript(fileName: string): void;
+  updateScript(fileName: string, text: string): void;
+};
 
 export function loadMarkoFiles(dir: string, all = new Set<string>()) {
   for (const entry of fs.readdirSync(dir)) {
@@ -93,4 +133,86 @@ export function loadMarkoFiles(dir: string, all = new Set<string>()) {
   }
 
   return all;
+}
+
+function createTestLanguageService(
+  rootDir: string,
+  compilerOptions: ts.CompilerOptions,
+) {
+  const snapshots = new Map<string, ts.IScriptSnapshot>();
+  const versions = new Map<string, number>();
+  const files = new Set([...loadMarkoFiles(rootDir)].map(normalizePath));
+  const host: ts.LanguageServiceHost = {
+    getCompilationSettings: () => compilerOptions,
+    getCurrentDirectory: () => rootDir,
+    getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+    getScriptFileNames: () => [...files],
+    getScriptSnapshot(fileName) {
+      fileName = normalizePath(fileName);
+      let snapshot = snapshots.get(fileName);
+      if (!snapshot) {
+        const text = ts.sys.readFile(fileName);
+        if (text === undefined) {
+          return;
+        }
+        snapshot = ts.ScriptSnapshot.fromString(text);
+        snapshots.set(fileName, snapshot);
+      }
+      return snapshot;
+    },
+    getScriptVersion: (fileName) =>
+      String(versions.get(normalizePath(fileName)) ?? 0),
+    readFile: ts.sys.readFile,
+    fileExists: ts.sys.fileExists,
+  };
+  return {
+    service: ts.createLanguageService(host),
+    closeScript(fileName: string) {
+      fileName = normalizePath(fileName);
+      snapshots.delete(fileName);
+      versions.set(fileName, (versions.get(fileName) ?? 0) + 1);
+    },
+    updateScript(fileName: string, text: string) {
+      fileName = normalizePath(fileName);
+      files.add(fileName);
+      snapshots.set(fileName, ts.ScriptSnapshot.fromString(text));
+      versions.set(fileName, (versions.get(fileName) ?? 0) + 1);
+    },
+  };
+}
+
+function syncTestLanguageServiceDocuments(
+  server: LanguageServerHandle,
+  languageService: TestLanguageService,
+) {
+  const openInMemoryDocument = server.openInMemoryDocument.bind(server);
+  server.openInMemoryDocument = async (uri, languageId, content) => {
+    const document = await openInMemoryDocument(uri, languageId, content);
+    languageService.updateScript(URI.parse(uri).fsPath, document.getText());
+    return document;
+  };
+
+  const openTextDocument = server.openTextDocument.bind(server);
+  server.openTextDocument = async (fileName, languageId) => {
+    const document = await openTextDocument(fileName, languageId);
+    languageService.updateScript(fileName, document.getText());
+    return document;
+  };
+
+  const updateTextDocument = server.updateTextDocument.bind(server);
+  server.updateTextDocument = async (uri, edits) => {
+    const document = await updateTextDocument(uri, edits);
+    languageService.updateScript(URI.parse(uri).fsPath, document.getText());
+    return document;
+  };
+
+  const closeTextDocument = server.closeTextDocument.bind(server);
+  server.closeTextDocument = async (uri) => {
+    await closeTextDocument(uri);
+    languageService.closeScript(URI.parse(uri).fsPath);
+  };
+}
+
+function normalizePath(fileName: string) {
+  return fileName.replace(/\\/g, "/");
 }

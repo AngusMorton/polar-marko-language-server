@@ -1,3 +1,4 @@
+import { MarkoVirtualCode } from "@marko/language-core";
 import type {
   LanguageServiceContext,
   Position,
@@ -5,8 +6,6 @@ import type {
   TextDocument,
 } from "@volar/language-service";
 import { URI } from "vscode-uri";
-
-import { MarkoVirtualCode } from "../../language";
 
 export function resolveMarkoCode(
   context: LanguageServiceContext,
@@ -158,6 +157,33 @@ export function getSourceRange(
     return {
       start: embedded.sourceDocument.positionAt(sourceStart),
       end: embedded.sourceDocument.positionAt(sourceEnd),
+    };
+  }
+}
+
+export function getGeneratedRange(
+  context: LanguageServiceContext,
+  sourceUri: URI,
+  embeddedCodeId: string,
+  range: Range,
+) {
+  const embedded = getEmbeddedDocument(context, sourceUri, embeddedCodeId);
+  if (!embedded) {
+    return;
+  }
+
+  const start = embedded.sourceDocument.offsetAt(range.start);
+  const end = embedded.sourceDocument.offsetAt(range.end);
+
+  for (const [generatedStart, generatedEnd] of embedded.map.toGeneratedRange(
+    start,
+    end,
+    true,
+    (data) => !!data.completion,
+  )) {
+    return {
+      start: embedded.document.positionAt(generatedStart),
+      end: embedded.document.positionAt(generatedEnd),
     };
   }
 }
