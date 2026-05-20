@@ -39,7 +39,7 @@ export function provideDefinition(
     case NodeType.AttrName:
       return provideAttrDefinition(node, root, componentMeta);
     case NodeType.OpenTagName:
-      return provideTagDefinition(node, root);
+      return provideTagDefinition(node, root, componentMeta);
     default:
       return;
   }
@@ -226,8 +226,10 @@ function declarationToLocationLink(
 function provideTagDefinition(
   node: Node.OpenTagName,
   root: MarkoVirtualCode,
+  componentMeta?: MarkoComponentMetaSession,
 ): LocationLink[] | undefined {
   const tag = node.parent;
+  const tagName = tag.nameText || "";
   const tagDef =
     tag.type === NodeType.AttrTag
       ? tag.owner?.nameText
@@ -263,14 +265,20 @@ function provideTagDefinition(
     }
   }
 
-  return [
-    {
-      targetUri: URI.file(tagEntryFile).toString(),
-      targetRange: range,
-      targetSelectionRange: range,
-      originSelectionRange: root.markoAst.locationAt(node),
-    },
-  ];
+  const componentLink = {
+    targetUri: URI.file(tagEntryFile).toString(),
+    targetRange: range,
+    targetSelectionRange: range,
+    originSelectionRange: root.markoAst.locationAt(node),
+  } satisfies LocationLink;
+  const inputLinks = componentMeta
+    ?.getTagMetaForTag(tagName)
+    ?.input?.declarations.map((declaration) =>
+      declarationToLocationLink(declaration, root.markoAst.locationAt(node)),
+    )
+    .filter((link): link is LocationLink => !!link);
+
+  return inputLinks?.length ? [componentLink, ...inputLinks] : [componentLink];
 }
 
 function escapeRegExp(value: string) {

@@ -1,12 +1,12 @@
 import { NodeType } from "@marko/language-tools";
 import type { CompletionItem, CompletionList } from "@volar/language-service";
 
-import { AttrName } from "../marko/complete/AttrName";
-import { Import } from "../marko/complete/Import";
-import { OpenTagName } from "../marko/complete/OpenTagName";
-import { Tag } from "../marko/complete/Tag";
 import { MARKO_TEMPLATE_SOURCE, MarkoCompletionKind } from "./completion-types";
 import type { MarkoComponentMetaSession } from "./component-meta";
+import { AttrName } from "./source-completions/AttrName";
+import { Import } from "./source-completions/Import";
+import { OpenTagName } from "./source-completions/OpenTagName";
+import { Tag } from "./source-completions/Tag";
 import type { MarkoTemplateContext } from "./util";
 
 export function provideSourceOnlyCompletions(

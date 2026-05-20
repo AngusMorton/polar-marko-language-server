@@ -50,6 +50,28 @@ describe("navigation", () => {
     );
   });
 
+  it("adds custom tag input declarations to definitions", async () => {
+    const locations = await requestDefinition(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      "<fancy-button█ />",
+    );
+
+    assert(locations?.length, "Expected definition result");
+    assert.match(
+      getDefinitionUri(locations[0]!),
+      /components\/fancy-button\/index\.marko$/,
+    );
+    assert(
+      locations.some(
+        (location) =>
+          /components\/fancy-button\/index\.marko$/.test(
+            getDefinitionUri(location),
+          ) && getDefinitionStartLine(location) === 0,
+      ),
+      "Expected definition result for the component Input declaration",
+    );
+  });
+
   it("defines local custom attrs from marko-template", async () => {
     const locations = await requestDefinition(
       fixturePath("script", "bound-attr-modifier-ident", "index.marko"),
@@ -68,6 +90,10 @@ describe("navigation", () => {
 
     assert(hover, "Expected hover result");
     assert.match(getHoverText(hover), /Attributes:[\s\S]*`message: string`/);
+    assert.match(
+      getHoverText(hover),
+      /Input:[\s\S]*```typescript[\s\S]*export interface Input extends Marko\.Input<"div"> \{[\s\S]*message: string;[\s\S]*tone\?: Tone;/,
+    );
   });
 
   it("hovers custom tag attrs from component meta", async () => {
@@ -78,6 +104,39 @@ describe("navigation", () => {
 
     assert(hover, "Expected hover result");
     assert.match(getHoverText(hover), /`message: string`/);
+  });
+
+  it("hovers shorthand attribute values as JavaScript expressions", async () => {
+    const hover = await requestHover(
+      fixturePath("script", "basic", "index.marko"),
+      ["static const testId = 'button-id';", "<button id=test█Id />"].join(
+        "\n",
+      ),
+    );
+
+    assert(hover, "Expected hover result");
+    assert.match(getHoverText(hover), /const testId: "button-id"/);
+    assert.deepEqual(hover.range, {
+      start: Position.create(1, 11),
+      end: Position.create(1, 17),
+    });
+  });
+
+  it("hovers object attribute value members as JavaScript expressions", async () => {
+    const hover = await requestHover(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      [
+        "static const temp = true;",
+        "<fancy-button custom={ te█mp: true, options: false } />",
+      ].join("\n"),
+    );
+
+    assert(hover, "Expected hover result");
+    assert.match(getHoverText(hover), /\(property\) temp: boolean/);
+    assert.deepEqual(hover.range, {
+      start: Position.create(1, 23),
+      end: Position.create(1, 27),
+    });
   });
 });
 
@@ -107,7 +166,12 @@ async function requestDefinition(fileName: string, sourceWithCursor: string) {
   await serverHandle.openInMemoryDocument(uri, "marko", content);
 
   try {
-    return await serverHandle.sendDefinitionRequest(uri, position);
+    const definitions = await serverHandle.sendDefinitionRequest(uri, position);
+    return definitions
+      ? Array.isArray(definitions)
+        ? definitions
+        : [definitions]
+      : undefined;
   } finally {
     await serverHandle.closeTextDocument(uri);
   }
@@ -150,4 +214,13 @@ function getHoverText(hover: {
 
 function getDefinitionUri(location: { uri?: string; targetUri?: string }) {
   return location.targetUri ?? location.uri ?? "";
+}
+
+function getDefinitionStartLine(location: {
+  range?: { start: { line: number } };
+  targetSelectionRange?: { start: { line: number } };
+}) {
+  return (
+    location.targetSelectionRange?.start.line ?? location.range?.start.line
+  );
 }

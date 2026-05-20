@@ -1,5 +1,8 @@
-export interface Input {
+static type Tone = "info" | "warning";
+
+export interface Input extends Marko.Input<"div"> {
   message: string;
+  tone?: Tone;
 }
 
 <div>Hello ${input.message}</div>

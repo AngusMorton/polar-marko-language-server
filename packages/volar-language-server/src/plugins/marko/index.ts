@@ -7,7 +7,6 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
 
 import { provideValidations } from "./validate";
-// import { provideDocumentSymbols } from "./document-symbols";
 
 export const create = (
   _: typeof import("typescript"),
@@ -22,13 +21,6 @@ export const create = (
     },
     create(context): LanguageServicePluginInstance {
       return {
-        // TODO: Is this necessary?
-        // provideDocumentSymbols(document, token) {
-        //   if (token.isCancellationRequested) return;
-        //   return worker(document, (virtualCode) => {
-        //     return provideDocumentSymbols(virtualCode);
-        //   });
-        // },
         provideDiagnostics(document, token) {
           if (token.isCancellationRequested) return;
           return worker(document, async (virtualCode) => {

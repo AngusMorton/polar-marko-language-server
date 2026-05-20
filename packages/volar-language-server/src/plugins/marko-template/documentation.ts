@@ -21,6 +21,10 @@ export function formatTagMetaDocumentation(
     );
   }
 
+  if (meta.input) {
+    sections.push(formatInputTypeMetaDocumentation(meta.input));
+  }
+
   if (meta.attrTags.length) {
     sections.push(
       `Attr Tags:\n${meta.attrTags.map(formatAttrTagLine).join("\n")}`,
@@ -32,6 +36,12 @@ export function formatTagMetaDocumentation(
   }
 
   return sections.join("\n\n");
+}
+
+export function formatInputTypeMetaDocumentation(
+  input: NonNullable<TagMeta["input"]>,
+) {
+  return `Input:\n\n\`\`\`typescript\n${input.source || `type Input = ${input.type};`}\n\`\`\``;
 }
 
 export function formatInputMetaDocumentation(

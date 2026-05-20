@@ -23,7 +23,7 @@ import { createComponentMetaManager } from "./component-meta";
 import { provideDefinition } from "./definition";
 import { provideHover } from "./hover";
 import { createMarkoHtmlService } from "./html-service";
-import { provideSourceOnlyCompletions } from "./source-completions";
+import { provideSourceOnlyCompletions } from "./provideSourceOnlyCompletions";
 import type { MarkoTsServer } from "./tsserver";
 import {
   getMarkoCompletionData,

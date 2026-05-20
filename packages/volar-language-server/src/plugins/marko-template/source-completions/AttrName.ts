@@ -10,7 +10,7 @@ import {
   TextEdit,
 } from "vscode-languageserver";
 
-import { formatInputMetaDocumentation } from "../../marko-template/documentation";
+import { formatInputMetaDocumentation } from "../documentation";
 
 export function AttrName(
   node: Node.AttrName,

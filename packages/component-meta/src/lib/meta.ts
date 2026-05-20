@@ -14,6 +14,7 @@ import type {
   BodyMeta,
   Declaration,
   InputMeta,
+  InputTypeMeta,
   TagMeta,
   ValueMeta,
 } from "./types";
@@ -91,6 +92,9 @@ export function extractTagMeta(
       getSymbolDocumentation(tsModule, moduleSymbol, checker) ||
       getSymbolDocumentation(tsModule, inputSymbol, checker),
     declarations: getTagDeclarations(inputSymbol, fileName, extracted),
+    input: inputSymbol
+      ? extractInputTypeMeta(inputSymbol, inputType, context)
+      : undefined,
     inputs,
     attrTags,
     body,
@@ -167,6 +171,22 @@ function extractInputMeta(
     declarations: getDeclarations(symbol, context),
     enumValues: getEnumValues(type, context.checker, taglibAttr?.enum),
   } satisfies InputMeta;
+}
+
+function extractInputTypeMeta(
+  symbol: ts.Symbol,
+  type: ts.Type | undefined,
+  context: MetadataContext,
+): InputTypeMeta {
+  return {
+    name: "Input",
+    description: getSymbolDocumentation(context.ts, symbol, context.checker),
+    type: type
+      ? typeToString(context.ts, context.checker, type, context.sourceFile)
+      : symbol.getName(),
+    source: getInputSource(symbol, context),
+    declarations: getDeclarations(symbol, context),
+  } satisfies InputTypeMeta;
 }
 
 function extractAttrTagMeta(
@@ -284,6 +304,37 @@ function getDeclarations(symbol: ts.Symbol, context: MetadataContext) {
           range: [0, 0] as [number, number],
         },
       ];
+}
+
+function getInputSource(symbol: ts.Symbol, context: MetadataContext) {
+  const declaration = symbol.declarations?.find(
+    (declaration) =>
+      context.ts.isInterfaceDeclaration(declaration) ||
+      context.ts.isTypeAliasDeclaration(declaration),
+  );
+  if (!declaration) {
+    return;
+  }
+
+  const sourceFile = declaration.getSourceFile();
+  const start = declaration.getStart(sourceFile);
+  const declarationText = declaration.getText(sourceFile);
+
+  const extracted = context.extracted;
+  if (extracted) {
+    const mappedRange = extracted.sourceRangeAt(start, declaration.end);
+    if (mappedRange) {
+      const mappedText = extracted.parsed.code.slice(
+        mappedRange.start,
+        mappedRange.end,
+      );
+      return /^(?:export\s+)?(?:interface|type)\s+Input\b/.test(mappedText)
+        ? mappedText
+        : declarationText;
+    }
+  }
+
+  return declarationText;
 }
 
 function mapDeclaration(

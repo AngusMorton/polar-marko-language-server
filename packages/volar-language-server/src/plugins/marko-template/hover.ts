@@ -3,14 +3,14 @@ import { type Node, NodeType } from "@marko/language-tools";
 import type { Hover } from "@volar/language-service";
 import { MarkupKind } from "vscode-languageserver";
 
-import getTagNameCompletion from "../marko/util/get-tag-name-completion";
-import { isHTML } from "../marko/util/is-html";
 import type { MarkoComponentMetaSession } from "./component-meta";
 import {
   formatInputMetaDocumentation,
   formatTagMetaDocumentation,
 } from "./documentation";
 import type { MarkoTemplateContext } from "./util";
+import getTagNameCompletion from "./util/get-tag-name-completion";
+import { isHTML } from "./util/is-html";
 
 export function provideHover(
   templateContext: MarkoTemplateContext,

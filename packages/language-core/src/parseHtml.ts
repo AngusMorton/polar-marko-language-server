@@ -1,4 +1,4 @@
-import { type Extracted, extractHTML } from "@marko/language-tools";
+import { type Extracted, extractHTML, NodeType } from "@marko/language-tools";
 import type { CodeMapping, VirtualCode } from "@volar/language-core";
 
 export function parseHtml(
@@ -30,16 +30,21 @@ export function parseHtml(
 
 function generateMappingsFromExtracted(extracted: Extracted): CodeMapping[] {
   return extracted.tokens.map((it) => {
+    const sourceNode = extracted.parsed.nodeAt(
+      it.sourceStart + Math.min(1, Math.max(0, it.length - 1)),
+    );
+    const isAttrValue = sourceNode?.type === NodeType.AttrValue;
+
     return {
       sourceOffsets: [it.sourceStart],
       generatedOffsets: [it.generatedStart],
       lengths: [it.length],
       data: {
-        completion: true,
+        completion: !isAttrValue,
         format: false,
-        navigation: true,
-        semantic: true,
-        structure: true,
+        navigation: !isAttrValue,
+        semantic: !isAttrValue,
+        structure: !isAttrValue,
         verification: true,
       },
     };

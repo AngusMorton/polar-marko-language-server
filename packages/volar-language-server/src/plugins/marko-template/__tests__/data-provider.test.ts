@@ -71,6 +71,13 @@ describe("marko-template data provider", () => {
       name: "fancy-button",
       description: "",
       declarations: [],
+      input: {
+        name: "Input",
+        description: "",
+        type: "Input",
+        source: "export interface Input {\n  message: string;\n}",
+        declarations: [],
+      },
       inputs: [
         {
           name: "message",
@@ -102,6 +109,14 @@ describe("marko-template data provider", () => {
       ),
       /Attributes:[\s\S]*`message: string`/,
     );
+    assert.match(
+      String(
+        isMarkupContent(tag.description)
+          ? tag.description.value
+          : tag.description,
+      ),
+      /Input:[\s\S]*```typescript[\s\S]*export interface Input \{[\s\S]*message: string;/,
+    );
 
     const attr = provider
       .provideAttributes("fancy-button")
@@ -131,8 +146,8 @@ describe("marko-template data provider", () => {
       await server.updateTextDocument(componentUri, [
         {
           range: {
-            start: Position.create(2, 0),
-            end: Position.create(2, 0),
+            start: Position.create(4, 0),
+            end: Position.create(4, 0),
           },
           newText: "  /** Live-only input. */\n  liveOnly?: string;\n",
         },

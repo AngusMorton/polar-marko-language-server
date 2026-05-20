@@ -30,11 +30,17 @@ export interface AttrTagMeta extends ValueMeta {
   body?: BodyMeta;
 }
 
+export interface InputTypeMeta extends ValueMeta {
+  name: "Input";
+  source?: string;
+}
+
 export interface TagMeta {
   file: string;
   name: string;
   description: string;
   declarations: Declaration[];
+  input?: InputTypeMeta;
   inputs: InputMeta[];
   attrTags: AttrTagMeta[];
   body?: BodyMeta;
