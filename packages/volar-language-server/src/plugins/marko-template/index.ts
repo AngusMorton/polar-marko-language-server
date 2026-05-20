@@ -23,7 +23,10 @@ import { createComponentMetaManager } from "./component-meta";
 import { provideDefinition } from "./definition";
 import { provideHover } from "./hover";
 import { createMarkoHtmlService } from "./html-service";
-import { provideSourceOnlyCompletions } from "./provideSourceOnlyCompletions";
+import {
+  isSourceOnlyCompletionContext,
+  provideSourceOnlyCompletions,
+} from "./provideSourceOnlyCompletions";
 import type { MarkoTsServer } from "./tsserver";
 import {
   getMarkoCompletionData,
@@ -116,8 +119,9 @@ export const create = (
             sourceOnlyCompletion,
           );
 
-          const htmlCompletion = isOpenTagNameCompletionContext(templateContext)
-            ? await provideHtmlCompletionItems(
+          const htmlCompletion = isSourceOnlyCompletionContext(templateContext)
+            ? undefined
+            : await provideHtmlCompletionItems(
                 {
                   async provideCompletionItems(document, position, context) {
                     return (
@@ -134,8 +138,7 @@ export const create = (
                 },
                 templateContext,
                 completionContext,
-              )
-            : undefined;
+              );
 
           const tagSymbolCompletion = isOpenTagNameCompletionContext(
             templateContext,

@@ -62,6 +62,37 @@ export function provideSourceOnlyCompletions(
   };
 }
 
+export function isSourceOnlyCompletionContext(
+  templateContext: MarkoTemplateContext,
+) {
+  const { root, node } = templateContext;
+
+  switch (node?.type) {
+    case NodeType.AttrName:
+      return shouldUseSourceAttrCompletions(node, root);
+    case NodeType.AttrArgs:
+    case NodeType.AttrMethod:
+    case NodeType.AttrSpread:
+    case NodeType.Import:
+    case NodeType.Placeholder:
+    case NodeType.Scriptlet:
+    case NodeType.Static:
+    case NodeType.Tag:
+    case NodeType.TagArgs:
+    case NodeType.TagParams:
+    case NodeType.TagTypeArgs:
+    case NodeType.TagTypeParams:
+    case NodeType.TagVar:
+      return true;
+    case NodeType.OpenTagName:
+      return node.parent.type === NodeType.AttrTag;
+    case NodeType.AttrValue:
+      return node.bound;
+    default:
+      return false;
+  }
+}
+
 function shouldUseSourceAttrCompletions(
   node: Extract<
     NonNullable<MarkoTemplateContext["node"]>,

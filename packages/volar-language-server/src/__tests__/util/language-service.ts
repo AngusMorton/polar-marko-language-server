@@ -36,6 +36,36 @@ export async function getLanguageServer() {
           snippetSupport: true,
         },
       },
+      semanticTokens: {
+        dynamicRegistration: false,
+        requests: {
+          full: true,
+          range: true,
+        },
+        tokenTypes: [
+          "namespace",
+          "class",
+          "enum",
+          "interface",
+          "typeParameter",
+          "type",
+          "parameter",
+          "variable",
+          "property",
+          "enumMember",
+          "function",
+          "method",
+        ],
+        tokenModifiers: [
+          "declaration",
+          "readonly",
+          "static",
+          "async",
+          "defaultLibrary",
+          "local",
+        ],
+        formats: [protocol.TokenFormat.Relative],
+      },
     },
   };
   const compilerOptions: ts.CompilerOptions = {

@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
 
+import { provideSourceOnlyCompletions } from "../provideSourceOnlyCompletions";
 import {
   createVirtualCode,
   fixturePath,
-} from "../../marko/complete/__tests__/helpers";
-import { provideSourceOnlyCompletions } from "../source-completions";
+} from "../source-completions/__tests__/helpers";
 
 describe("marko-template source completions", () => {
   it("keeps attr tag completions source-driven", () => {

@@ -10,11 +10,11 @@ import {
   getLanguageServer,
   shutdownLanguageServer,
 } from "../../../__tests__/util/language-service";
+import { createMarkoDataProvider } from "../data-provider";
 import {
   createVirtualCode,
   fixturePath,
-} from "../../marko/complete/__tests__/helpers";
-import { createMarkoDataProvider } from "../data-provider";
+} from "../source-completions/__tests__/helpers";
 
 describe("marko-template data provider", () => {
   after(shutdownLanguageServer);
