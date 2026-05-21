@@ -77,6 +77,34 @@ describe("marko-template data provider", () => {
         type: "Input",
         source: "export interface Input {\n  message: string;\n}",
         declarations: [],
+        tags: [],
+        schema: "Input",
+        getDeclarations() {
+          return [];
+        },
+        getTypeObject() {
+          return undefined;
+        },
+        props: [
+          {
+            name: "message",
+            description: "",
+            type: "string",
+            required: true,
+            declarations: [],
+            tags: [],
+            schema: "string",
+            global: false,
+            getDeclarations() {
+              return [];
+            },
+            getTypeObject() {
+              return undefined as never;
+            },
+          },
+        ],
+        events: [],
+        attrTags: [],
       },
       inputs: [
         {
@@ -85,8 +113,18 @@ describe("marko-template data provider", () => {
           type: "string",
           required: true,
           declarations: [],
+          tags: [],
+          schema: "string",
+          global: false,
+          getDeclarations() {
+            return [];
+          },
+          getTypeObject() {
+            return undefined as never;
+          },
         },
       ],
+      events: [],
       attrTags: [],
     });
     await componentMeta.preloadTags();
@@ -107,7 +145,7 @@ describe("marko-template data provider", () => {
           ? tag.description.value
           : tag.description,
       ),
-      /Attributes:[\s\S]*`message: string`/,
+      /Input Props:[\s\S]*`message: string`/,
     );
     assert.match(
       String(
@@ -130,6 +168,51 @@ describe("marko-template data provider", () => {
       ),
       /`message: string`/,
     );
+  });
+
+  it("uses structured input metadata for docs and completions", async () => {
+    const server = await getLanguageServer();
+    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
+    const uri = URI.file(fileName).toString();
+
+    await server.openInMemoryDocument(uri, "marko", "<fancy-button on/>");
+    try {
+      const attrCompletions = await server.sendCompletionRequest(
+        uri,
+        Position.create(0, 16),
+      );
+      assert(
+        attrCompletions?.items.some((item) => item.label === "onSelect?"),
+        "Expected event input completion",
+      );
+    } finally {
+      await server.closeTextDocument(uri);
+    }
+  });
+
+  it("uses owner tag metadata for attr tag prop completions", async () => {
+    const server = await getLanguageServer();
+    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
+    const uri = URI.file(fileName).toString();
+
+    await server.openInMemoryDocument(
+      uri,
+      "marko",
+      "<fancy-button><@icon na/></fancy-button>",
+    );
+    try {
+      const completions = await server.sendCompletionRequest(
+        uri,
+        Position.create(0, 23),
+      );
+
+      assert(
+        completions?.items.some((item) => item.label === "name"),
+        "Expected attr tag prop completion from owner tag metadata",
+      );
+    } finally {
+      await server.closeTextDocument(uri);
+    }
   });
 
   it("uses live TypeScript program metadata after unsaved edits", async () => {
@@ -181,7 +264,28 @@ function createPreparedComponentMeta(meta: TagMeta) {
     },
     getInputMetaForTag(tagName: string, attrName: string) {
       return tagName === meta.name
-        ? meta.inputs.find((input) => input.name === attrName)
+        ? meta.input?.props.find((input) => input.name === attrName)
+        : undefined;
+    },
+    getEventMetaForTag(tagName: string, eventName: string) {
+      return tagName === meta.name
+        ? meta.input?.events.find((event) => event.name === eventName)
+        : undefined;
+    },
+    getAttrTagMetaForTag(tagName: string, attrTagName: string) {
+      return tagName === meta.name
+        ? meta.input?.attrTags.find((attrTag) => attrTag.name === attrTagName)
+        : undefined;
+    },
+    getAttrTagInputMetaForTag(
+      tagName: string,
+      attrTagName: string,
+      attrName: string,
+    ) {
+      return tagName === meta.name
+        ? meta.input?.attrTags
+            .find((attrTag) => attrTag.name === attrTagName)
+            ?.props.find((input) => input.name === attrName)
         : undefined;
     },
   };

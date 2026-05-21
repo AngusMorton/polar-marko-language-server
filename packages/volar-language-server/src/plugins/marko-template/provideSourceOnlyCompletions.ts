@@ -27,7 +27,7 @@ export function provideSourceOnlyCompletions(
           node,
           root,
           offset,
-          componentMeta?.getTagMetaForTag(node.parent.parent.nameText || ""),
+          componentMeta?.getTagMetaForTag(getOwnerTagName(node) || ""),
         );
       }
       break;
@@ -38,11 +38,27 @@ export function provideSourceOnlyCompletions(
     case NodeType.Tag:
       items = Tag(node, root, offset);
       break;
-    case NodeType.OpenTagName:
-      if (node.parent.type === NodeType.AttrTag) {
-        items = OpenTagName(node, root);
+    case NodeType.AttrTag:
+    case NodeType.OpenTagName: {
+      const openTagName =
+        node.type === NodeType.AttrTag &&
+        offset >= node.name.start &&
+        offset <= node.name.end
+          ? node.name
+          : node.type === NodeType.OpenTagName
+            ? node
+            : undefined;
+      if (openTagName?.parent.type === NodeType.AttrTag) {
+        items = OpenTagName(
+          openTagName,
+          root,
+          openTagName.parent.owner?.nameText
+            ? componentMeta?.getTagMetaForTag(openTagName.parent.owner.nameText)
+            : undefined,
+        );
       }
       break;
+    }
   }
 
   if (!items?.length) {
@@ -65,7 +81,7 @@ export function provideSourceOnlyCompletions(
 export function isSourceOnlyCompletionContext(
   templateContext: MarkoTemplateContext,
 ) {
-  const { root, node } = templateContext;
+  const { root, node, offset } = templateContext;
 
   switch (node?.type) {
     case NodeType.AttrName:
@@ -84,6 +100,8 @@ export function isSourceOnlyCompletionContext(
     case NodeType.TagTypeParams:
     case NodeType.TagVar:
       return true;
+    case NodeType.AttrTag:
+      return offset >= node.name.start && offset <= node.name.end;
     case NodeType.OpenTagName:
       return node.parent.type === NodeType.AttrTag;
     case NodeType.AttrValue:
@@ -104,7 +122,17 @@ function shouldUseSourceAttrCompletions(
     return true;
   }
 
-  const tagName = node.parent.parent.nameText || "";
+  const tagName = getOwnerTagName(node) || "";
   const tag = tagName && root.tagLookup.getTag(tagName);
   return !tag || !tag.html;
+}
+
+function getOwnerTagName(
+  node: Extract<
+    NonNullable<MarkoTemplateContext["node"]>,
+    { type: NodeType.AttrName }
+  >,
+) {
+  const tag = node.parent.parent;
+  return tag.type === NodeType.AttrTag ? tag.owner?.nameText : tag.nameText;
 }

@@ -1,6 +1,6 @@
 import type { InputMeta, TagMeta } from "@marko/component-meta";
 import { MarkoVirtualCode } from "@marko/language-core";
-import type { Node } from "@marko/language-tools";
+import { type Node, NodeType } from "@marko/language-tools";
 import {
   type CompletionItem,
   CompletionItemKind,
@@ -16,7 +16,7 @@ export function AttrName(
   node: Node.AttrName,
   file: MarkoVirtualCode,
   offset: number,
-  tagMeta?: Pick<TagMeta, "inputs">,
+  tagMeta?: Pick<TagMeta, "input" | "inputs">,
 ): CompletionItem[] | undefined {
   let name = file.markoAst.read(node);
   const modifierIndex = name.indexOf(":");
@@ -44,7 +44,7 @@ export function AttrName(
   const completions: CompletionItem[] = [];
   const seenNames = new Set<string>();
   const inputMetaByName = new Map<string, InputMeta>(
-    tagMeta?.inputs.map((input) => [input.name, input]) ?? [],
+    getInputProps(node, tagMeta).map((input) => [input.name, input]) ?? [],
   );
   const attrNameLoc = file.markoAst.locationAt(
     hasModifier
@@ -55,7 +55,11 @@ export function AttrName(
       : node,
   );
 
-  const tagName = node.parent.parent.nameText || "";
+  const tag = node.parent.parent;
+  const tagName =
+    tag.type === NodeType.AttrTag
+      ? tag.owner?.nameText || ""
+      : tag.nameText || "";
   const tagDef = tagName && file.tagLookup.getTag(tagName);
   const nestedTagAttrs: { [x: string]: boolean } = {};
 
@@ -144,7 +148,7 @@ export function AttrName(
     });
   });
 
-  for (const input of tagMeta?.inputs ?? []) {
+  for (const input of getInputProps(node, tagMeta)) {
     if (seenNames.has(input.name) || nestedTagAttrs[input.name]) {
       continue;
     }
@@ -173,7 +177,71 @@ export function AttrName(
     });
   }
 
+  for (const event of getInputEvents(node, tagMeta)) {
+    if (seenNames.has(event.name) || nestedTagAttrs[event.name]) {
+      continue;
+    }
+
+    completions.push({
+      label: event.required ? event.name : `${event.name}?`,
+      documentation: {
+        kind: MarkupKind.Markdown,
+        value: `\`${event.name}: ${event.signature || event.type}\`${
+          event.description ? `\n\n${event.description}` : ""
+        }`,
+      },
+      kind: CompletionItemKind.Function,
+      insertTextFormat: InsertTextFormat.Snippet,
+      textEdit: TextEdit.replace(attrNameLoc, `${event.name}($1) {\n\t$0\n}`),
+    });
+  }
+
   return completions;
+}
+
+function getInputProps(
+  node: Node.AttrName,
+  tagMeta: Pick<TagMeta, "input" | "inputs"> | undefined,
+) {
+  const tag = node.parent.parent;
+  if (tag.type === NodeType.AttrTag) {
+    const attrTagName = tag.nameText.split(":").pop();
+    return (
+      (tag.owner?.nameText
+        ? tagMeta?.input?.attrTags.find((attrTag) =>
+            attrTagMatches(attrTag, attrTagName),
+          )?.props
+        : undefined) ?? []
+    );
+  }
+
+  return tagMeta?.input?.props ?? tagMeta?.inputs ?? [];
+}
+
+function getInputEvents(
+  node: Node.AttrName,
+  tagMeta: Pick<TagMeta, "input" | "inputs"> | undefined,
+) {
+  const tag = node.parent.parent;
+  if (tag.type === NodeType.AttrTag) {
+    const attrTagName = tag.nameText.split(":").pop();
+    return (
+      (tag.owner?.nameText
+        ? tagMeta?.input?.attrTags.find((attrTag) =>
+            attrTagMatches(attrTag, attrTagName),
+          )?.events
+        : undefined) ?? []
+    );
+  }
+
+  return tagMeta?.input?.events ?? [];
+}
+
+function attrTagMatches(
+  attrTag: NonNullable<Pick<TagMeta, "input">["input"]>["attrTags"][number],
+  attrTagName: string | undefined,
+) {
+  return attrTag.name === attrTagName || attrTag.propertyName === attrTagName;
 }
 
 function isExternalModule(file: string) {

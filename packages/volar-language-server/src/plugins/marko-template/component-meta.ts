@@ -1,4 +1,9 @@
-import type { InputMeta, TagMeta } from "@marko/component-meta";
+import type {
+  AttrTagMeta,
+  EventMeta,
+  InputMeta,
+  TagMeta,
+} from "@marko/component-meta";
 import type { MarkoVirtualCode } from "@marko/language-core";
 import type { LanguageServiceContext } from "@volar/language-service";
 
@@ -8,6 +13,16 @@ export interface MarkoComponentMetaSession {
   preloadTags(tagNames: Iterable<string>): Promise<void>;
   getTagMetaForTag(tagName: string): TagMeta | undefined;
   getInputMetaForTag(tagName: string, attrName: string): InputMeta | undefined;
+  getEventMetaForTag(tagName: string, eventName: string): EventMeta | undefined;
+  getAttrTagMetaForTag(
+    tagName: string,
+    attrTagName: string,
+  ): AttrTagMeta | undefined;
+  getAttrTagInputMetaForTag(
+    tagName: string,
+    attrTagName: string,
+    attrName: string,
+  ): InputMeta | undefined;
 }
 
 export interface MarkoComponentMetaManager {
@@ -28,16 +43,38 @@ export function createComponentMetaManager(
       return {
         async preloadTags(tagNames) {
           await Promise.all(
-            [...tagNames].map((tagName) => loadTagMeta(tagName)),
+            [...tagNames].map((tagName) =>
+              loadTagMeta(normalizeTagName(tagName)),
+            ),
           );
         },
         getTagMetaForTag(tagName) {
-          return tagMetaByName.get(tagName);
+          return tagMetaByName.get(normalizeTagName(tagName));
         },
         getInputMetaForTag(tagName, attrName) {
           return tagMetaByName
-            .get(tagName)
-            ?.inputs.find((input) => input.name === attrName);
+            .get(normalizeTagName(tagName))
+            ?.input?.props.find((input) => input.name === attrName);
+        },
+        getEventMetaForTag(tagName, eventName) {
+          return tagMetaByName
+            .get(normalizeTagName(tagName))
+            ?.input?.events.find((event) => event.name === eventName);
+        },
+        getAttrTagMetaForTag(tagName, attrTagName) {
+          return tagMetaByName
+            .get(normalizeTagName(tagName))
+            ?.input?.attrTags.find((attrTag) =>
+              isAttrTagMatch(attrTag, attrTagName),
+            );
+        },
+        getAttrTagInputMetaForTag(tagName, attrTagName, attrName) {
+          return tagMetaByName
+            .get(normalizeTagName(tagName))
+            ?.input?.attrTags.find((attrTag) =>
+              isAttrTagMatch(attrTag, attrTagName),
+            )
+            ?.props.find((input) => input.name === attrName);
         },
       } satisfies MarkoComponentMetaSession;
 
@@ -66,4 +103,17 @@ export function createComponentMetaManager(
       }
     },
   } satisfies MarkoComponentMetaManager;
+}
+
+function normalizeTagName(tagName: string) {
+  return tagName.split(":")[0]!;
+}
+
+function normalizeAttrTagName(attrTagName: string) {
+  return attrTagName.split(":").pop()!;
+}
+
+function isAttrTagMatch(attrTag: AttrTagMeta, attrTagName: string) {
+  attrTagName = normalizeAttrTagName(attrTagName);
+  return attrTag.name === attrTagName || attrTag.propertyName === attrTagName;
 }

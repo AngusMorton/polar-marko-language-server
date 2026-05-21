@@ -5,6 +5,8 @@ import { MarkupKind } from "vscode-languageserver";
 
 import type { MarkoComponentMetaSession } from "./component-meta";
 import {
+  formatAttrTagMetaDocumentation,
+  formatEventMetaDocumentation,
   formatInputMetaDocumentation,
   formatTagMetaDocumentation,
 } from "./documentation";
@@ -64,6 +66,25 @@ function provideTagHover(
   componentMeta?: MarkoComponentMetaSession,
 ): Hover | undefined {
   const tag = node.parent;
+  if (tag.type === NodeType.AttrTag && tag.owner?.nameText) {
+    const attrTagMeta = componentMeta?.getAttrTagMetaForTag(
+      tag.owner.nameText,
+      tag.nameText,
+    );
+    const value = attrTagMeta
+      ? formatAttrTagMetaDocumentation(attrTagMeta)
+      : "";
+    if (value) {
+      return {
+        range: root.markoAst.locationAt(node),
+        contents: {
+          kind: MarkupKind.Markdown,
+          value,
+        },
+      };
+    }
+  }
+
   const tagDef = tag.nameText && root.tagLookup.getTag(tag.nameText);
 
   if (!tagDef) {
@@ -136,8 +157,23 @@ function provideAttrHover(
   }
 
   const attrDef = root.tagLookup.getAttribute(tagName, attrName);
-  const inputMeta = componentMeta?.getInputMetaForTag(tagName, attrName);
+  const inputMeta = getAttributeInputMeta(
+    node,
+    tagName,
+    attrName,
+    componentMeta,
+  );
+  const eventMeta = componentMeta?.getEventMetaForTag(tagName, attrName);
   if (!attrDef && !inputMeta) {
+    if (eventMeta) {
+      return {
+        range: root.markoAst.locationAt(node),
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: formatEventMetaDocumentation(eventMeta),
+        },
+      };
+    }
     return;
   }
 
@@ -171,6 +207,26 @@ function provideAttrHover(
       value,
     },
   };
+}
+
+function getAttributeInputMeta(
+  node: Node.AttrName,
+  tagName: string,
+  attrName: string,
+  componentMeta: MarkoComponentMetaSession | undefined,
+) {
+  const parentTag = node.parent.parent;
+  if (parentTag.type === NodeType.AttrTag) {
+    return parentTag.owner?.nameText
+      ? componentMeta?.getAttrTagInputMetaForTag(
+          parentTag.owner.nameText,
+          parentTag.nameText,
+          attrName,
+        )
+      : undefined;
+  }
+
+  return componentMeta?.getInputMetaForTag(tagName, attrName);
 }
 
 function getModifierDocumentation(modifier: string) {

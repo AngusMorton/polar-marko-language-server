@@ -1,7 +1,10 @@
 import type {
   AttrTagMeta,
   BodyMeta,
+  ContentMeta,
+  EventMeta,
   InputMeta,
+  ResultMeta,
   TagMeta,
 } from "@marko/component-meta";
 
@@ -15,24 +18,36 @@ export function formatTagMetaDocumentation(
     sections.push(meta.description);
   }
 
-  if (meta.inputs.length) {
+  const input = meta.input;
+
+  if (input?.props.length) {
     sections.push(
-      `Attributes:\n${meta.inputs.map(formatInputLine).join("\n")}`,
+      `Input Props:\n${input.props.map(formatInputLine).join("\n")}`,
     );
   }
 
-  if (meta.input) {
-    sections.push(formatInputTypeMetaDocumentation(meta.input));
-  }
-
-  if (meta.attrTags.length) {
+  if (input?.events.length) {
     sections.push(
-      `Attr Tags:\n${meta.attrTags.map(formatAttrTagLine).join("\n")}`,
+      `Input Events:\n${input.events.map(formatEventLine).join("\n")}`,
     );
   }
 
-  if (meta.body) {
-    sections.push(`Body:\n- ${formatBodySignature(meta.body)}`);
+  if (input?.attrTags.length) {
+    sections.push(
+      `Attr Tags:\n${input.attrTags.map(formatAttrTagLine).join("\n")}`,
+    );
+  }
+
+  if (input?.content) {
+    sections.push(`Content:\n- ${formatContentSignature(input.content)}`);
+  }
+
+  if (meta.result) {
+    sections.push(formatResultMetaDocumentation(meta.result));
+  }
+
+  if (input) {
+    sections.push(formatInputTypeMetaDocumentation(input));
   }
 
   return sections.join("\n\n");
@@ -67,6 +82,24 @@ export function formatInputMetaDocumentation(
   return sections.join("\n\n");
 }
 
+export function formatEventMetaDocumentation(
+  event: Pick<EventMeta, "description" | "name" | "signature" | "type">,
+) {
+  const sections = [`\`${event.name}: ${event.signature || event.type}\``];
+  if (event.description) {
+    sections.push(event.description);
+  }
+  return sections.join("\n\n");
+}
+
+export function formatAttrTagMetaDocumentation(attrTag: AttrTagMeta) {
+  const sections = [formatAttrTagLine(attrTag).slice(2)];
+  if (attrTag.description) {
+    sections.push(attrTag.description);
+  }
+  return sections.join("\n\n");
+}
+
 function formatInputLine(input: Pick<InputMeta, "name" | "required" | "type">) {
   return `- ${formatInlineInputSignature(input)}`;
 }
@@ -80,17 +113,37 @@ function formatInlineInputSignature(
 function formatAttrTagLine(attrTag: AttrTagMeta) {
   const pieces = [`\`@${attrTag.name}${attrTag.required ? "" : "?"}\``];
 
-  if (attrTag.inputs.length) {
+  if (attrTag.props.length) {
     pieces.push(
-      `with ${attrTag.inputs.map(formatInlineInputSignature).join(", ")}`,
+      `with ${attrTag.props.map(formatInlineInputSignature).join(", ")}`,
     );
   }
 
-  if (attrTag.body) {
-    pieces.push(`body ${formatBodySignature(attrTag.body)}`);
+  if (attrTag.events.length) {
+    pieces.push(
+      `events ${attrTag.events.map((event) => event.name).join(", ")}`,
+    );
+  }
+
+  if (attrTag.content) {
+    pieces.push(`content ${formatContentSignature(attrTag.content)}`);
   }
 
   return `- ${pieces.join(" ")}`;
+}
+
+function formatEventLine(
+  event: Pick<EventMeta, "name" | "signature" | "type">,
+) {
+  return `- \`${event.name}: ${event.signature || event.type}\``;
+}
+
+function formatResultMetaDocumentation(result: ResultMeta) {
+  return `Result:\n- \`${result.type}\``;
+}
+
+function formatContentSignature(content: ContentMeta) {
+  return `${formatBodySignature(content)} via \`input.${content.propertyName}\``;
 }
 
 function formatBodySignature(body: BodyMeta) {

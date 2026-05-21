@@ -143,9 +143,20 @@ function provideAttrDefinition(
   const tagName = node.parent.parent.nameText || "";
   const rawAttrName = root.markoAst.read(node);
   const attrName = rawAttrName.split(":", 1)[0]!;
-  const metaDefinitions = componentMeta
-    ?.getInputMetaForTag(tagName, attrName)
-    ?.declarations.map((declaration) =>
+  const inputMeta = getAttributeInputMeta(
+    node,
+    tagName,
+    attrName,
+    componentMeta,
+  );
+  const eventMeta = getAttributeEventMeta(
+    node,
+    tagName,
+    attrName,
+    componentMeta,
+  );
+  const metaDefinitions = (inputMeta ?? eventMeta)?.declarations
+    .map((declaration) =>
       declarationToLocationLink(declaration, root.markoAst.locationAt(node)),
     )
     .filter((link): link is LocationLink => !!link);
@@ -223,6 +234,39 @@ function declarationToLocationLink(
   } satisfies LocationLink;
 }
 
+function getAttributeInputMeta(
+  node: Node.AttrName,
+  tagName: string,
+  attrName: string,
+  componentMeta: MarkoComponentMetaSession | undefined,
+) {
+  const parentTag = node.parent.parent;
+  if (parentTag.type === NodeType.AttrTag) {
+    return parentTag.owner?.nameText
+      ? componentMeta?.getAttrTagInputMetaForTag(
+          parentTag.owner.nameText,
+          parentTag.nameText,
+          attrName,
+        )
+      : undefined;
+  }
+
+  return componentMeta?.getInputMetaForTag(tagName, attrName);
+}
+
+function getAttributeEventMeta(
+  node: Node.AttrName,
+  tagName: string,
+  attrName: string,
+  componentMeta: MarkoComponentMetaSession | undefined,
+) {
+  if (node.parent.parent.type === NodeType.AttrTag) {
+    return;
+  }
+
+  return componentMeta?.getEventMetaForTag(tagName, attrName);
+}
+
 function provideTagDefinition(
   node: Node.OpenTagName,
   root: MarkoVirtualCode,
@@ -230,6 +274,22 @@ function provideTagDefinition(
 ): LocationLink[] | undefined {
   const tag = node.parent;
   const tagName = tag.nameText || "";
+  const attrTagDefinitions =
+    tag.type === NodeType.AttrTag && tag.owner?.nameText
+      ? componentMeta
+          ?.getAttrTagMetaForTag(tag.owner.nameText, tag.nameText)
+          ?.declarations.map((declaration) =>
+            declarationToLocationLink(
+              declaration,
+              root.markoAst.locationAt(node),
+            ),
+          )
+          .filter((link): link is LocationLink => !!link)
+      : undefined;
+  if (attrTagDefinitions?.length) {
+    return attrTagDefinitions;
+  }
+
   const tagDef =
     tag.type === NodeType.AttrTag
       ? tag.owner?.nameText

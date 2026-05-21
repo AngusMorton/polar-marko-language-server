@@ -1,4 +1,6 @@
 import {
+  type ComponentMetaChecker,
+  createChecker,
   extractTagMetaFromProgram,
   resolveTagFile,
 } from "@marko/component-meta";
@@ -14,6 +16,7 @@ const rootDir = path.resolve(__dirname, "../fixtures");
 
 let serverHandle: LanguageServerHandle | undefined;
 let languageService: TestLanguageService | undefined;
+let componentMetaChecker: ComponentMetaChecker | undefined;
 
 Project.setDefaultTypePaths({
   internalTypesFile:
@@ -89,6 +92,9 @@ export async function getLanguageServer() {
       require.resolve("typescript/lib/typescript.js"),
     );
     languageService = createTestLanguageService(fixturesDir, compilerOptions);
+    componentMetaChecker = createChecker(
+      path.join(fixturesDir, "tsconfig.json"),
+    );
     serverHandle.connection.onNotification(
       "tsserver/request",
       ([id, command, args]: [
@@ -107,8 +113,11 @@ export async function getLanguageServer() {
         const fileName = resolveTagFile(args.fileName, args.tagName);
         return serverHandle?.connection.sendNotification("tsserver/response", [
           id,
-          program && fileName
-            ? extractTagMetaFromProgram(ts, program, fileName)
+          fileName
+            ? (componentMetaChecker?.getTagMeta(fileName) ??
+              (program
+                ? extractTagMetaFromProgram(ts, program, fileName)
+                : undefined))
             : undefined,
         ]);
       },
@@ -143,6 +152,7 @@ export async function shutdownLanguageServer() {
   serverHandle.connection.sendNotification(protocol.ExitNotification.type);
   serverHandle = undefined;
   languageService = undefined;
+  componentMetaChecker = undefined;
 }
 
 type TestLanguageService = {
@@ -219,6 +229,7 @@ function syncTestLanguageServiceDocuments(
   server.openInMemoryDocument = async (uri, languageId, content) => {
     const document = await openInMemoryDocument(uri, languageId, content);
     languageService.updateScript(URI.parse(uri).fsPath, document.getText());
+    updateComponentMetaDocument(uri, document.getText());
     return document;
   };
 
@@ -226,6 +237,10 @@ function syncTestLanguageServiceDocuments(
   server.openTextDocument = async (fileName, languageId) => {
     const document = await openTextDocument(fileName, languageId);
     languageService.updateScript(fileName, document.getText());
+    updateComponentMetaDocument(
+      URI.file(fileName).toString(),
+      document.getText(),
+    );
     return document;
   };
 
@@ -233,14 +248,30 @@ function syncTestLanguageServiceDocuments(
   server.updateTextDocument = async (uri, edits) => {
     const document = await updateTextDocument(uri, edits);
     languageService.updateScript(URI.parse(uri).fsPath, document.getText());
+    updateComponentMetaDocument(uri, document.getText());
     return document;
   };
 
   const closeTextDocument = server.closeTextDocument.bind(server);
   server.closeTextDocument = async (uri) => {
+    const fileName = URI.parse(uri).fsPath;
     await closeTextDocument(uri);
-    languageService.closeScript(URI.parse(uri).fsPath);
+    languageService.closeScript(fileName);
+    if (isTagLikeFile(fileName)) {
+      componentMetaChecker?.clearCache();
+    }
   };
+}
+
+function updateComponentMetaDocument(uri: string, text: string) {
+  const fileName = URI.parse(uri).fsPath;
+  if (isTagLikeFile(fileName)) {
+    componentMetaChecker?.updateFile(fileName, text);
+  }
+}
+
+function isTagLikeFile(fileName: string) {
+  return /[\\/](?:components|tags)[\\/]/.test(fileName);
 }
 
 function normalizePath(fileName: string) {

@@ -8,7 +8,7 @@ export interface Input {
   row?: Marko.AttrTag<{
     /** Whether the row is enabled. */
     enabled?: boolean;
-    /** Row body. */
-    renderBody?: Marko.Body<[data: { id: string }], void>;
+    /** Row content. */
+    content?: Marko.Body<[data: { id: string }], void>;
   }>;
 }

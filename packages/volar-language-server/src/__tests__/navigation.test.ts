@@ -82,6 +82,24 @@ describe("navigation", () => {
     assert.match(getDefinitionUri(locations[0]!), /tags\/child\.marko$/);
   });
 
+  it("adds custom event input declarations to definitions", async () => {
+    const locations = await requestDefinition(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      "<fancy-button onSelect█() {} />",
+    );
+
+    assert(locations?.length, "Expected event definition result");
+    assert(
+      locations.some(
+        (location) =>
+          /components\/fancy-button\/index\.marko$/.test(
+            getDefinitionUri(location),
+          ) && getDefinitionStartLine(location) === 6,
+      ),
+      "Expected definition result for the component event declaration",
+    );
+  });
+
   it("hovers custom tag docs from component meta", async () => {
     const hover = await requestHover(
       fixturePath("script", "tags-api-basic", "index.marko"),
@@ -89,10 +107,10 @@ describe("navigation", () => {
     );
 
     assert(hover, "Expected hover result");
-    assert.match(getHoverText(hover), /Attributes:[\s\S]*`message: string`/);
+    assert.match(getHoverText(hover), /Input Props:[\s\S]*`message: string`/);
     assert.match(
       getHoverText(hover),
-      /Input:[\s\S]*```typescript[\s\S]*export interface Input extends Marko\.Input<"div"> \{[\s\S]*message: string;[\s\S]*tone\?: Tone;/,
+      /Input:[\s\S]*```typescript[\s\S]*export interface Input extends Omit<Marko\.Input<"div">, "content" \| "onSelect"> \{[\s\S]*message: string;[\s\S]*tone\?: Tone;/,
     );
   });
 
@@ -104,6 +122,17 @@ describe("navigation", () => {
 
     assert(hover, "Expected hover result");
     assert.match(getHoverText(hover), /`message: string`/);
+  });
+
+  it("hovers custom attr tags from component meta", async () => {
+    const hover = await requestHover(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      "<fancy-button><@icon█ name='search'/></fancy-button>",
+    );
+
+    assert(hover, "Expected attr tag hover result");
+    assert.match(getHoverText(hover), /`@icon/);
+    assert.match(getHoverText(hover), /with `name: string`/);
   });
 
   it("hovers shorthand attribute values as JavaScript expressions", async () => {

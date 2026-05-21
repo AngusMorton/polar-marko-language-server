@@ -9,12 +9,17 @@ import {
 import path from "path";
 import type ts from "typescript";
 
+import { createSchemaResolvers } from "./schema";
 import type {
   AttrTagMeta,
   BodyMeta,
+  ContentMeta,
   Declaration,
+  EventMeta,
   InputMeta,
-  InputTypeMeta,
+  MetaCheckerOptions,
+  ResultMeta,
+  TagInputMeta,
   TagMeta,
   ValueMeta,
 } from "./types";
@@ -27,24 +32,57 @@ type MetadataContext = {
   sourceFile: ts.SourceFile;
   extracted?: Extracted;
   tagDef?: TagDefinition;
+  options: Required<Pick<MetaCheckerOptions, "noDeclarations" | "rawType">> &
+    Pick<MetaCheckerOptions, "schema">;
+  schema: ReturnType<typeof createSchemaResolvers>;
 };
+
+const defaultOptions = {
+  schema: false,
+  noDeclarations: false,
+  rawType: false,
+} satisfies MetadataContext["options"];
 
 export function extractTagMeta(
   tsModule: typeof import("typescript"),
   checker: ts.TypeChecker,
   sourceFile: ts.SourceFile,
   extracted: Extracted | undefined,
+  options: MetaCheckerOptions = defaultOptions,
 ): TagMeta {
   const fileName = extracted
     ? normalizePath(extracted.parsed.filename)
     : normalizePath(sourceFile.fileName);
   const tagDef = findTagDefinitionForFile(fileName);
-  const context: MetadataContext = {
+  const context = {
     ts: tsModule,
     checker,
     sourceFile,
     extracted,
     tagDef,
+    options: {
+      schema: options.schema ?? defaultOptions.schema,
+      noDeclarations: options.noDeclarations ?? defaultOptions.noDeclarations,
+      rawType: options.rawType ?? defaultOptions.rawType,
+    },
+  } as Omit<MetadataContext, "schema">;
+  const schema = createSchemaResolvers({
+    ts: tsModule,
+    checker,
+    sourceFile,
+    options: context.options.schema ?? false,
+    deprecatedOptions: context.options,
+    getDeclarations: (declarations) =>
+      getDeclarationRanges(
+        declarations,
+        context.extracted,
+        context.sourceFile,
+        false,
+      ),
+  });
+  const fullContext: MetadataContext = {
+    ...context,
+    schema,
   };
 
   const moduleSymbol = checker.getSymbolAtLocation(sourceFile);
@@ -56,10 +94,10 @@ export function extractTagMeta(
   const inputType = inputSymbol
     ? checker.getDeclaredTypeOfSymbol(inputSymbol)
     : undefined;
-
   const inputs: InputMeta[] = [];
   const attrTags: AttrTagMeta[] = [];
-  let body: BodyMeta | undefined;
+  const events: EventMeta[] = [];
+  let content: ContentMeta | undefined;
 
   for (const property of inputType?.getProperties() ?? []) {
     const propertyType = checker.getTypeOfSymbolAtLocation(
@@ -67,22 +105,38 @@ export function extractTagMeta(
       sourceFile,
     );
 
-    if (property.getName() === "renderBody") {
-      const bodyMeta = extractBodyMeta(property, propertyType, context);
+    if (isContentPropertyName(property.getName())) {
+      const bodyMeta = extractBodyMeta(property, propertyType, fullContext);
       if (bodyMeta) {
-        body = bodyMeta;
+        content = extractContentMeta(property, bodyMeta, fullContext);
         continue;
       }
     }
 
     const attrTagTarget = unwrapAttrTagType(tsModule, propertyType, checker);
     if (attrTagTarget) {
-      attrTags.push(extractAttrTagMeta(property, attrTagTarget, context));
+      const attrTag = extractAttrTagMeta(property, attrTagTarget, fullContext);
+      attrTags.push(attrTag);
       continue;
     }
 
-    inputs.push(extractInputMeta(property, propertyType, context));
+    const event = extractEventMeta(property, propertyType, fullContext);
+    if (event) {
+      events.push(event);
+      continue;
+    }
+
+    inputs.push(extractInputMeta(property, propertyType, fullContext));
   }
+
+  const input = inputSymbol
+    ? extractInputTypeMeta(inputSymbol, inputType, fullContext, {
+        props: inputs,
+        attrTags,
+        events,
+        content,
+      })
+    : undefined;
 
   return {
     file: fileName,
@@ -92,12 +146,12 @@ export function extractTagMeta(
       getSymbolDocumentation(tsModule, moduleSymbol, checker) ||
       getSymbolDocumentation(tsModule, inputSymbol, checker),
     declarations: getTagDeclarations(inputSymbol, fileName, extracted),
-    input: inputSymbol
-      ? extractInputTypeMeta(inputSymbol, inputType, context)
-      : undefined,
+    input,
+    result: extractResultMeta(moduleSymbol, fullContext),
     inputs,
+    events,
     attrTags,
-    body,
+    body: content,
   } satisfies TagMeta;
 }
 
@@ -106,6 +160,7 @@ export function extractTagMetaFromProgram(
   program: ts.Program,
   fileName: string,
   extracted?: Extracted,
+  options?: MetaCheckerOptions,
 ) {
   fileName = normalizePath(fileName);
   const virtualFileName = toVirtualFileName(fileName, program);
@@ -126,6 +181,7 @@ export function extractTagMetaFromProgram(
     program.getTypeChecker(),
     sourceFile,
     extracted,
+    options,
   );
 }
 
@@ -167,8 +223,25 @@ function extractInputMeta(
       taglibAttr?.description ||
       "",
     type: typeToString(context.ts, context.checker, type, context.sourceFile),
+    default: stringifyDefaultValue(taglibAttr?.defaultValue),
+    global: false,
     required: !isOptionalSymbol(context.ts, symbol),
-    declarations: getDeclarations(symbol, context),
+    tags: context.schema.getJsDocTags(symbol),
+    schema: context.schema.resolveSchema(type),
+    get declarations() {
+      return context.options.noDeclarations ? [] : this.getDeclarations();
+    },
+    get rawType() {
+      if (context.options.rawType) {
+        return this.getTypeObject();
+      }
+    },
+    getDeclarations() {
+      return getDeclarations(symbol, context);
+    },
+    getTypeObject() {
+      return type;
+    },
     enumValues: getEnumValues(type, context.checker, taglibAttr?.enum),
   } satisfies InputMeta;
 }
@@ -177,16 +250,36 @@ function extractInputTypeMeta(
   symbol: ts.Symbol,
   type: ts.Type | undefined,
   context: MetadataContext,
-): InputTypeMeta {
+  input: Pick<TagInputMeta, "attrTags" | "content" | "events" | "props">,
+): TagInputMeta {
   return {
     name: "Input",
     description: getSymbolDocumentation(context.ts, symbol, context.checker),
     type: type
       ? typeToString(context.ts, context.checker, type, context.sourceFile)
       : symbol.getName(),
+    tags: context.schema.getJsDocTags(symbol),
+    schema: type ? context.schema.resolveSchema(type) : symbol.getName(),
     source: getInputSource(symbol, context),
-    declarations: getDeclarations(symbol, context),
-  } satisfies InputTypeMeta;
+    props: input.props,
+    attrTags: input.attrTags,
+    events: input.events,
+    content: input.content,
+    get declarations() {
+      return context.options.noDeclarations ? [] : this.getDeclarations();
+    },
+    get rawType() {
+      if (context.options.rawType) {
+        return this.getTypeObject();
+      }
+    },
+    getDeclarations() {
+      return getDeclarations(symbol, context);
+    },
+    getTypeObject() {
+      return type;
+    },
+  } satisfies TagInputMeta;
 }
 
 function extractAttrTagMeta(
@@ -194,23 +287,51 @@ function extractAttrTagMeta(
   targetType: ts.Type,
   context: MetadataContext,
 ): AttrTagMeta {
-  const inputs: InputMeta[] = [];
-  let body: BodyMeta | undefined;
+  const props: InputMeta[] = [];
+  const attrTags: AttrTagMeta[] = [];
+  const events: EventMeta[] = [];
+  let content: ContentMeta | undefined;
+  const nestedTag = context.tagDef?.nestedTags
+    ? Object.values(context.tagDef.nestedTags).find(
+        (tag) => tag.targetProperty === symbol.getName(),
+      )
+    : undefined;
 
   for (const property of targetType.getProperties()) {
     const propertyType = context.checker.getTypeOfSymbolAtLocation(
       property,
       context.sourceFile,
     );
-    if (property.getName() === "renderBody") {
-      body = extractBodyMeta(property, propertyType, context);
+    if (isContentPropertyName(property.getName())) {
+      const bodyMeta = extractBodyMeta(property, propertyType, context);
+      if (bodyMeta) {
+        content = extractContentMeta(property, bodyMeta, context);
+      }
       continue;
     }
-    inputs.push(extractInputMeta(property, propertyType, context));
+
+    const attrTagTarget = unwrapAttrTagType(
+      context.ts,
+      propertyType,
+      context.checker,
+    );
+    if (attrTagTarget) {
+      attrTags.push(extractAttrTagMeta(property, attrTagTarget, context));
+      continue;
+    }
+
+    const event = extractEventMeta(property, propertyType, context);
+    if (event) {
+      events.push(event);
+      continue;
+    }
+
+    props.push(extractInputMeta(property, propertyType, context));
   }
 
   return {
-    name: symbol.getName(),
+    name: nestedTag?.name ?? symbol.getName(),
+    propertyName: symbol.getName(),
     description: getSymbolDocumentation(context.ts, symbol, context.checker),
     type: typeToString(
       context.ts,
@@ -218,10 +339,30 @@ function extractAttrTagMeta(
       targetType,
       context.sourceFile,
     ),
+    global: false,
     required: !isOptionalSymbol(context.ts, symbol),
-    declarations: getDeclarations(symbol, context),
-    inputs,
-    body,
+    tags: context.schema.getJsDocTags(symbol),
+    schema: context.schema.resolveSchema(targetType),
+    get declarations() {
+      return context.options.noDeclarations ? [] : this.getDeclarations();
+    },
+    get rawType() {
+      if (context.options.rawType) {
+        return this.getTypeObject();
+      }
+    },
+    getDeclarations() {
+      return getDeclarations(symbol, context);
+    },
+    getTypeObject() {
+      return targetType;
+    },
+    props,
+    attrTags,
+    events,
+    content,
+    inputs: props,
+    body: content,
   } satisfies AttrTagMeta;
 }
 
@@ -246,15 +387,215 @@ function extractBodyMeta(
           bodyType.returnType,
           context.sourceFile,
         ),
-        declarations: getDeclarations(symbol, context),
+        tags: [],
+        schema: context.schema.resolveSchema(bodyType.returnType),
+        get declarations() {
+          return context.options.noDeclarations ? [] : this.getDeclarations();
+        },
+        get rawType() {
+          if (context.options.rawType) {
+            return this.getTypeObject();
+          }
+        },
+        getDeclarations() {
+          return getDeclarations(symbol, context);
+        },
+        getTypeObject() {
+          return bodyType.returnType;
+        },
       } satisfies ValueMeta);
 
   return {
     description: getSymbolDocumentation(context.ts, symbol, context.checker),
     type: typeToString(context.ts, context.checker, type, context.sourceFile),
+    tags: context.schema.getJsDocTags(symbol),
+    schema: context.schema.resolveSchema(type),
     parameters,
     return: returnMeta,
+    get declarations() {
+      return context.options.noDeclarations ? [] : this.getDeclarations();
+    },
+    get rawType() {
+      if (context.options.rawType) {
+        return this.getTypeObject();
+      }
+    },
+    getDeclarations() {
+      return getDeclarations(symbol, context);
+    },
+    getTypeObject() {
+      return type;
+    },
   } satisfies BodyMeta;
+}
+
+function extractEventMeta(
+  symbol: ts.Symbol,
+  type: ts.Type,
+  context: MetadataContext,
+): EventMeta | undefined {
+  const name = symbol.getName();
+  if (!isEventInputName(name)) {
+    return;
+  }
+
+  const eventType = getCallableType(type);
+  const signature = eventType?.getCallSignatures()[0];
+  if (!signature) {
+    return;
+  }
+
+  return context.schema.resolveEvent(symbol, signature);
+}
+
+function getCallableType(type: ts.Type): ts.Type | undefined {
+  if (type.getCallSignatures().length) {
+    return type;
+  }
+
+  if (type.isUnion()) {
+    return type.types.find((part) => part.getCallSignatures().length);
+  }
+}
+
+function isContentPropertyName(name: string): name is "content" | "renderBody" {
+  return name === "content" || name === "renderBody";
+}
+
+function isEventInputName(name: string) {
+  return /^(?:on[A-Z]|on-|.+Change$)/.test(name);
+}
+
+function extractContentMeta(
+  symbol: ts.Symbol,
+  body: BodyMeta,
+  context: MetadataContext,
+): ContentMeta {
+  const propertyName = symbol.getName();
+  return {
+    ...body,
+    name: "content",
+    propertyName: isContentPropertyName(propertyName)
+      ? propertyName
+      : "content",
+    description: body.description,
+    type: body.type,
+    tags: body.tags,
+    schema: body.schema,
+    parameters: body.parameters,
+    return: body.return,
+    get declarations() {
+      return body.declarations;
+    },
+    get rawType() {
+      if (context.options.rawType) {
+        return this.getTypeObject();
+      }
+    },
+    getDeclarations() {
+      return body.getDeclarations();
+    },
+    getTypeObject() {
+      return context.checker.getTypeOfSymbolAtLocation(
+        symbol,
+        context.sourceFile,
+      );
+    },
+  } satisfies ContentMeta;
+}
+
+function extractResultMeta(
+  moduleSymbol: ts.Symbol | undefined,
+  context: MetadataContext,
+): ResultMeta | undefined {
+  const defaultSymbol = moduleSymbol
+    ? context.checker
+        .getExportsOfModule(moduleSymbol)
+        .find((symbol) => symbol.getName() === "default")
+    : undefined;
+  const defaultType = defaultSymbol
+    ? context.checker.getTypeOfSymbolAtLocation(
+        defaultSymbol,
+        context.sourceFile,
+      )
+    : undefined;
+  const templateMethod = defaultType?.getProperty("_");
+  const templateMethodType = templateMethod
+    ? context.checker.getTypeOfSymbolAtLocation(
+        templateMethod,
+        context.sourceFile,
+      )
+    : undefined;
+  const resultType = getTemplateResultType(templateMethodType, context);
+
+  if (!resultType || isVoidLike(resultType)) {
+    return;
+  }
+
+  return {
+    name: "result",
+    description: "",
+    type: typeToString(
+      context.ts,
+      context.checker,
+      resultType,
+      context.sourceFile,
+    ),
+    tags: [],
+    schema: context.schema.resolveSchema(resultType),
+    get declarations() {
+      return context.options.noDeclarations ? [] : this.getDeclarations();
+    },
+    get rawType() {
+      if (context.options.rawType) {
+        return this.getTypeObject();
+      }
+    },
+    getDeclarations() {
+      return [];
+    },
+    getTypeObject() {
+      return resultType;
+    },
+  } satisfies ResultMeta;
+}
+
+function getTemplateResultType(
+  templateMethodType: ts.Type | undefined,
+  context: MetadataContext,
+) {
+  let type = templateMethodType;
+  for (let i = 0; type && i < 3; i++) {
+    if (type.isUnion()) {
+      type = type.types.find((part) => part.getCallSignatures().length);
+    }
+    if (!type) {
+      break;
+    }
+
+    const signature = type.getCallSignatures()[0];
+    if (!signature) {
+      break;
+    }
+
+    type = signature.getReturnType();
+  }
+
+  return type && unwrapReturnWithScope(type, context);
+}
+
+function unwrapReturnWithScope(type: ts.Type, context: MetadataContext) {
+  if (type.aliasSymbol?.getName() === "ReturnWithScope") {
+    return type.aliasTypeArguments?.[1];
+  }
+
+  const returnProperty = type.getProperty("return");
+  if (returnProperty) {
+    return context.checker.getTypeOfSymbolAtLocation(
+      returnProperty,
+      context.sourceFile,
+    );
+  }
 }
 
 function getBodyParameters(paramsType: ts.Type, context: MetadataContext) {
@@ -266,12 +607,23 @@ function getBodyParameters(paramsType: ts.Type, context: MetadataContext) {
   const typeArguments = context.checker.getTypeArguments(tuple);
   const labels = tuple.target.labeledElementDeclarations;
 
-  return typeArguments.map((type, index) => ({
-    name: labels?.[index]?.name.getText(),
-    description: "",
-    type: typeToString(context.ts, context.checker, type, context.sourceFile),
-    declarations: [],
-  })) satisfies ValueMeta[];
+  return typeArguments.map((type, index) => {
+    const label = labels?.[index]?.name.getText();
+    return {
+      name: label,
+      description: "",
+      type: typeToString(context.ts, context.checker, type, context.sourceFile),
+      tags: [],
+      schema: context.schema.resolveSchema(type),
+      declarations: [],
+      getDeclarations() {
+        return [];
+      },
+      getTypeObject() {
+        return type;
+      },
+    } satisfies ValueMeta;
+  });
 }
 
 function getTagDeclarations(
@@ -292,9 +644,12 @@ function getTagDeclarations(
 }
 
 function getDeclarations(symbol: ts.Symbol, context: MetadataContext) {
-  const declarations = symbol.declarations
-    ?.map((declaration) => mapDeclaration(declaration, context.extracted))
-    .filter((declaration): declaration is Declaration => !!declaration);
+  const declarations = getDeclarationRanges(
+    symbol.declarations ?? [],
+    context.extracted,
+    context.sourceFile,
+    true,
+  );
   return declarations?.length
     ? declarations
     : [
@@ -304,6 +659,27 @@ function getDeclarations(symbol: ts.Symbol, context: MetadataContext) {
           range: [0, 0] as [number, number],
         },
       ];
+}
+
+function getDeclarationRanges(
+  declarations: readonly ts.Declaration[],
+  extracted: Extracted | undefined,
+  sourceFile: ts.SourceFile,
+  fallback = false,
+) {
+  const ranges = declarations
+    .map((declaration) => mapDeclaration(declaration, extracted))
+    .filter((declaration): declaration is Declaration => !!declaration);
+  if (ranges.length || !fallback) {
+    return ranges;
+  }
+
+  return [
+    {
+      file: normalizePath(extracted?.parsed.filename ?? sourceFile.fileName),
+      range: [0, 0] as [number, number],
+    },
+  ];
 }
 
 function getInputSource(symbol: ts.Symbol, context: MetadataContext) {
@@ -383,11 +759,45 @@ function unwrapAttrTagType(
   }
 
   if (type.aliasSymbol?.getName() === "AttrTag") {
-    return type.aliasTypeArguments?.[0];
+    return (
+      type.aliasTypeArguments?.[0] ??
+      findAttrTagTargetFromIntersection(tsModule, type, checker)
+    );
   }
 
   const reference = findNamedType(tsModule, type, checker, "AttrTag");
-  return reference && checker.getTypeArguments(reference)[0];
+  return (
+    (reference && checker.getTypeArguments(reference)[0]) ??
+    findAttrTagTargetFromIntersection(tsModule, type, checker)
+  );
+}
+
+function findAttrTagTargetFromIntersection(
+  tsModule: typeof import("typescript"),
+  type: ts.Type,
+  checker: ts.TypeChecker,
+) {
+  if (!type.isIntersection()) {
+    return;
+  }
+
+  return type.types.find(
+    (part) => !isIterableAttrTagPart(tsModule, part, checker),
+  );
+}
+
+function isIterableAttrTagPart(
+  _tsModule: typeof import("typescript"),
+  type: ts.Type,
+  checker: ts.TypeChecker,
+) {
+  return type.getProperties().some((property) => {
+    const name = property.getName();
+    return (
+      name === "__@iterator" ||
+      checker.symbolToString(property) === "[Symbol.iterator]"
+    );
+  });
 }
 
 function unwrapBodyType(
@@ -497,6 +907,16 @@ function getEnumValues(
   }
 
   return fallback?.length ? [...fallback] : undefined;
+}
+
+function stringifyDefaultValue(value: unknown) {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  return JSON.stringify(value);
 }
 
 function getLiteralValue(type: ts.Type, checker: ts.TypeChecker) {

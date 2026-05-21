@@ -1,12 +1,22 @@
-import { MarkoVirtualCode } from "@marko/language-core";
+import type { AttrTagMeta, TagMeta } from "@marko/component-meta";
+import type { MarkoVirtualCode } from "@marko/language-core";
 import { type Node, NodeType } from "@marko/language-tools";
-import { CompletionItem } from "vscode-languageserver";
+import {
+  CompletionItem,
+  CompletionItemKind,
+  InsertTextFormat,
+  MarkupKind,
+  type Range,
+  TextEdit,
+} from "vscode-languageserver";
 
+import { formatAttrTagMetaDocumentation } from "../documentation";
 import getTagNameCompletion from "../util/get-tag-name-completion";
 
 export function OpenTagName(
   node: Node.OpenTagName,
   file: MarkoVirtualCode,
+  tagMeta?: Pick<TagMeta, "input">,
 ): CompletionItem[] | undefined {
   const tag = node.parent;
   const range = file.markoAst.locationAt(node);
@@ -14,6 +24,10 @@ export function OpenTagName(
   const result: CompletionItem[] = [];
 
   if (isAttrTag) {
+    for (const attrTag of tagMeta?.input?.attrTags ?? []) {
+      result.push(getAttrTagCompletion(attrTag, range));
+    }
+
     const ownerTagDef =
       tag.owner &&
       tag.owner.nameText &&
@@ -62,4 +76,25 @@ export function OpenTagName(
   }
 
   return result;
+}
+
+function getAttrTagCompletion(attrTag: AttrTagMeta, range: Range) {
+  let snippet = `@${attrTag.name}`;
+  if (attrTag.props.length) {
+    snippet += ` ${attrTag.props[0]!.name}=`;
+  }
+  if (attrTag.content && !attrTag.props.length) {
+    snippet += `>$0</@${attrTag.name}>`;
+  }
+
+  return {
+    label: `@${attrTag.name}${attrTag.required ? "" : "?"}`,
+    documentation: {
+      kind: MarkupKind.Markdown,
+      value: formatAttrTagMetaDocumentation(attrTag),
+    },
+    kind: CompletionItemKind.Class,
+    insertTextFormat: InsertTextFormat.Snippet,
+    textEdit: TextEdit.replace(range, snippet),
+  } satisfies CompletionItem;
 }

@@ -4,10 +4,27 @@ export interface Input<T extends string = string> {
   message: T;
   /** Supported themes. */
   theme?: "primary" | "secondary";
+  /** Nested options. */
+  options: {
+    /** Option size. */
+    size: "small" | "large";
+    /** Recursive child option. */
+    child?: Input["options"];
+  };
+  /** First shared option. */
+  firstShared: {
+    /** Shared option value. */
+    value: string;
+  };
+  /** Second shared option. */
+  secondShared: Input["firstShared"];
   /** Optional click hook. */
   onPress?(): void;
-  /** Body rendered inside the button. */
-  renderBody?: Marko.Body<[state: { pressed: boolean }], void>;
+  /** Value change hook. */
+  valueChange?(value: T): void;
+  /** Tag content rendered inside the button. */
+  content?: Marko.Body<[state: { pressed: boolean }], void>;
 }
 
 <button>${input.message}</button>
+<return={ pressed: false }/>

@@ -115,7 +115,9 @@ function getAttributeData(
       return;
     }
 
-    const inputMeta = tagMeta?.inputs.find((input) => input.name === attr.name);
+    const inputMeta = tagMeta?.input?.props.find(
+      (input) => input.name === attr.name,
+    );
     const documentation = getAttributeDocumentation(
       attr.description,
       inputMeta,
@@ -145,7 +147,7 @@ function getAttributeData(
     });
   });
 
-  for (const input of tagMeta?.inputs ?? []) {
+  for (const input of tagMeta?.input?.props ?? []) {
     if (seenNames.has(input.name) || nestedTagAttrs.has(input.name)) {
       continue;
     }
@@ -157,6 +159,22 @@ function getAttributeData(
         value: formatInputMetaDocumentation(input),
       },
       values: input.enumValues?.map((value) => ({ name: value })),
+    });
+  }
+
+  for (const event of tagMeta?.input?.events ?? []) {
+    if (seenNames.has(event.name) || nestedTagAttrs.has(event.name)) {
+      continue;
+    }
+
+    attributes.push({
+      name: event.required ? event.name : `${event.name}?`,
+      description: {
+        kind: "markdown",
+        value: `\`${event.name}: ${event.signature || event.type}\`${
+          event.description ? `\n\n${event.description}` : ""
+        }`,
+      },
     });
   }
 

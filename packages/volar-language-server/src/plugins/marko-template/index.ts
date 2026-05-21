@@ -193,6 +193,25 @@ export const create = (
             return;
           }
 
+          if (!shouldUseHtmlHover(templateContext)) {
+            if (shouldUseMetadataHover(templateContext)) {
+              const componentMetaSession = componentMeta.prepare(
+                templateContext.root,
+                context,
+              );
+              await componentMetaSession.preloadTags(
+                getRelevantTagNames(templateContext.root, templateContext.node),
+              );
+              return provideHover(
+                templateContext,
+                undefined,
+                componentMetaSession,
+              );
+            }
+
+            return provideHover(templateContext, undefined);
+          }
+
           const componentMetaSession = componentMeta.prepare(
             templateContext.root,
             context,
@@ -205,14 +224,6 @@ export const create = (
             context,
             componentMetaSession,
           );
-
-          if (!shouldUseHtmlHover(templateContext)) {
-            return provideHover(
-              templateContext,
-              undefined,
-              componentMetaSession,
-            );
-          }
 
           const htmlHover = (await baseServiceInstance.provideHover?.(
             document,
@@ -434,15 +445,53 @@ function shouldUseHtmlHover(
   return !/^[A-Z]/.test(targetNode.parent.nameText || "");
 }
 
+function shouldUseMetadataHover(
+  templateContext: ReturnType<
+    typeof resolveMarkoTemplateContext
+  > extends infer T
+    ? Exclude<T, undefined>
+    : never,
+) {
+  const { node, offset, root } = templateContext;
+  if (
+    node?.type === NodeType.OpenTagName &&
+    node.parent.type === NodeType.AttrTag
+  ) {
+    return true;
+  }
+
+  const attrNode =
+    node?.type === NodeType.AttrName
+      ? node
+      : getAttrNameNodeAtOffset(root, offset);
+  return attrNode?.parent.parent.type === NodeType.AttrTag;
+}
+
+function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
+  const current = root.markoAst.nodeAt(offset);
+  if (current?.type === NodeType.AttrName) {
+    return current;
+  }
+
+  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
+  if (previous?.type === NodeType.AttrName) {
+    return previous;
+  }
+}
+
 function getRelevantTagNames(
   root: MarkoVirtualCode,
   node?: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
 ) {
   const tagName =
     node?.type === NodeType.AttrName
-      ? node.parent.parent.nameText
+      ? node.parent.parent.type === NodeType.AttrTag
+        ? node.parent.parent.owner?.nameText
+        : node.parent.parent.nameText
       : node?.type === NodeType.OpenTagName
-        ? node.parent.nameText
+        ? node.parent.type === NodeType.AttrTag
+          ? node.parent.owner?.nameText
+          : node.parent.nameText
         : undefined;
 
   if (tagName) {
