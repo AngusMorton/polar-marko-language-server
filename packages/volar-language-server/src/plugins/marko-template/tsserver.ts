@@ -9,6 +9,7 @@ export interface MarkoTsServer {
   getComponentMeta(
     fileName: string,
     tagName: string,
+    tagFileName?: string,
   ): Promise<TagMeta | undefined>;
 }
 
@@ -21,10 +22,11 @@ export function createMarkoTsServer(
   sendRequest: SendTsServerRequest,
 ): MarkoTsServer {
   return {
-    getComponentMeta(fileName, tagName) {
+    getComponentMeta(fileName, tagName, tagFileName) {
       return sendRequest<TagMeta | undefined>(getComponentMetaRequest, {
         fileName,
         tagName,
+        tagFileName,
       } satisfies GetComponentMetaRequestArgs);
     },
   } satisfies MarkoTsServer;

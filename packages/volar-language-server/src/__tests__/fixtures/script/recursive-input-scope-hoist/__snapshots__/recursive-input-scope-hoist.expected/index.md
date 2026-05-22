@@ -5,6 +5,10 @@
   2 |   <@comment#a>
 > 3 |     <@comment#b>
     |       ^ (property) "@comment": Marko.AttrTag<Comment> | undefined
+
+---
+
+`@comment` with `id: string` content `() => void` via `input.renderBody`
   4 | //    ^?
   5 |       <let/b = () => "b" as const/>
   6 |     </@comment>

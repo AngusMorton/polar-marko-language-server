@@ -9,6 +9,10 @@
         renderBody: Marko.Body;
     }>;
 }> | undefined
+
+---
+
+`@row?`
   7 |     // ^?
   8 |       <@cell>${row.foo}</@cell>
   9 |       // ^?     ^?
@@ -51,6 +55,10 @@
         renderBody: Marko.Body;
     }>;
 }> | undefined
+
+---
+
+`@row?`
   21 |     // ^?
   22 |       <@cell>${row.foo}</@cell>
   23 |       // ^?     ^?

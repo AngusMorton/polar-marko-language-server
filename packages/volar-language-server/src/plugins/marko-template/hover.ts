@@ -19,11 +19,66 @@ export function provideHover(
   htmlHover: Hover | null | undefined,
   componentMeta?: MarkoComponentMetaSession,
 ): Hover | undefined {
+  if (htmlHover) {
+    return mergeHtmlAndSourceHover(
+      htmlHover,
+      provideSourceHover(templateContext, componentMeta),
+    );
+  }
+
   if (isModifierHoverContext(templateContext)) {
     return provideSourceHover(templateContext, componentMeta);
   }
 
-  return htmlHover ?? provideSourceHover(templateContext, componentMeta);
+  return provideSourceHover(templateContext, componentMeta);
+}
+
+function mergeHtmlAndSourceHover(
+  htmlHover: Hover,
+  sourceHover: Hover | undefined,
+) {
+  if (!sourceHover) {
+    return htmlHover;
+  }
+
+  const htmlText = getHoverText(htmlHover);
+  const sourceText = getHoverText(sourceHover);
+  if (
+    !sourceText ||
+    htmlText.includes(sourceText) ||
+    (hasComponentMetadata(sourceText) && hasComponentMetadata(htmlText))
+  ) {
+    return htmlHover;
+  }
+
+  const contents = {
+    kind: MarkupKind.Markdown,
+    value: htmlText ? `${htmlText}\n\n---\n\n${sourceText}` : sourceText,
+  };
+
+  return {
+    ...htmlHover,
+    contents,
+  } satisfies Hover;
+}
+
+function hasComponentMetadata(value: string) {
+  return /(?:^|\n)(?:Input Props|Input Events|Attr Tags|Content|Result|Input):/.test(
+    value,
+  );
+}
+
+function getHoverText(hover: Hover) {
+  const { contents } = hover;
+  if (typeof contents === "string") {
+    return contents;
+  }
+  if (Array.isArray(contents)) {
+    return contents
+      .map((entry) => (typeof entry === "string" ? entry : entry.value))
+      .join("\n");
+  }
+  return contents.value;
 }
 
 function provideSourceHover(
@@ -31,8 +86,7 @@ function provideSourceHover(
   componentMeta?: MarkoComponentMetaSession,
 ): Hover | undefined {
   const { node, root, offset } = templateContext;
-  const fallbackAttrNode = getAttrNameNodeAtOffset(root, offset);
-  const targetNode = fallbackAttrNode ?? node;
+  const targetNode = getNameNodeAtOffset(root, offset, node);
 
   if (
     targetNode?.type !== NodeType.OpenTagName &&
@@ -83,18 +137,16 @@ function provideTagHover(
         },
       };
     }
-  }
 
-  const tagDef = tag.nameText && root.tagLookup.getTag(tag.nameText);
-
-  if (!tagDef) {
     return;
   }
 
-  if (!isHTML(tagDef)) {
-    const tagMeta =
-      tag.nameText && componentMeta?.getTagMetaForTag(tag.nameText);
-    const value = tagMeta ? formatTagMetaDocumentation(tagMeta) : "";
+  const tagName = tag.nameText || "";
+  const tagDef = tagName && root.tagLookup.getTag(tagName);
+  const tagMeta = tagName && componentMeta?.getTagMetaForTag(tagName);
+
+  if (tagMeta && (!tagDef || !isNativeHtmlTag(root, tagName))) {
+    const value = formatTagMetaDocumentation(tagMeta);
     if (!value) {
       return;
     }
@@ -106,6 +158,14 @@ function provideTagHover(
         value,
       },
     };
+  }
+
+  if (!tagDef) {
+    return;
+  }
+
+  if (!tagName || !isNativeHtmlTag(root, tagName)) {
+    return;
   }
 
   const completion = getTagNameCompletion({
@@ -164,16 +224,20 @@ function provideAttrHover(
     componentMeta,
   );
   const eventMeta = componentMeta?.getEventMetaForTag(tagName, attrName);
-  if (!attrDef && !inputMeta) {
-    if (eventMeta) {
+  if (eventMeta) {
+    const value = formatEventMetaDocumentation(eventMeta);
+    if (value) {
       return {
         range: root.markoAst.locationAt(node),
         contents: {
           kind: MarkupKind.Markdown,
-          value: formatEventMetaDocumentation(eventMeta),
+          value,
         },
       };
     }
+  }
+
+  if (!attrDef && !inputMeta) {
     return;
   }
 
@@ -181,16 +245,16 @@ function provideAttrHover(
     ? attrDef.autocomplete[0]
     : attrDef?.autocomplete;
   let value = inputMeta
-    ? formatInputMetaDocumentation(inputMeta, attrDef?.description)
+    ? formatInputMetaDocumentation(inputMeta)
     : attrDef?.description || "";
 
-  if (autocomplete?.description) {
+  if (!inputMeta && autocomplete?.description) {
     value += value
       ? `\n\n${autocomplete.description}`
       : autocomplete.description;
   }
 
-  if (autocomplete?.descriptionMoreURL) {
+  if (!inputMeta && autocomplete?.descriptionMoreURL) {
     value += value
       ? `\n\n[More Info](${autocomplete.descriptionMoreURL})`
       : `[More Info](${autocomplete.descriptionMoreURL})`;
@@ -271,4 +335,29 @@ function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
   if (previous?.type === NodeType.AttrName) {
     return previous;
   }
+}
+
+function getNameNodeAtOffset(
+  root: MarkoVirtualCode,
+  offset: number,
+  node?: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
+) {
+  if (node?.type === NodeType.AttrName || node?.type === NodeType.OpenTagName) {
+    return node;
+  }
+
+  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
+  if (
+    (previous?.type === NodeType.AttrName ||
+      previous?.type === NodeType.OpenTagName) &&
+    previous.end === offset
+  ) {
+    return previous;
+  }
+}
+
+function isNativeHtmlTag(root: MarkoVirtualCode, tagName: string) {
+  return (
+    tagName === tagName.toLowerCase() && isHTML(root.tagLookup.getTag(tagName))
+  );
 }

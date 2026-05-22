@@ -94,13 +94,16 @@ export async function getLanguageServer() {
     languageService = createTestLanguageService(fixturesDir, compilerOptions);
     componentMetaChecker = createChecker(
       path.join(fixturesDir, "tsconfig.json"),
+      {
+        noDeclarations: false,
+      },
     );
     serverHandle.connection.onNotification(
       "tsserver/request",
       ([id, command, args]: [
         number,
         string,
-        { fileName: string; tagName: string },
+        { fileName: string; tagFileName?: string; tagName: string },
       ]) => {
         if (command !== "_marko:getComponentMeta") {
           return serverHandle?.connection.sendNotification(
@@ -110,7 +113,9 @@ export async function getLanguageServer() {
         }
 
         const program = languageService?.service.getProgram();
-        const fileName = resolveTagFile(args.fileName, args.tagName);
+        const fileName = args.tagFileName
+          ? normalizeTagFileName(args.fileName, args.tagFileName)
+          : resolveTagFile(args.fileName, args.tagName);
         return serverHandle?.connection.sendNotification("tsserver/response", [
           id,
           fileName
@@ -272,6 +277,12 @@ function updateComponentMetaDocument(uri: string, text: string) {
 
 function isTagLikeFile(fileName: string) {
   return /[\\/](?:components|tags)[\\/]/.test(fileName);
+}
+
+function normalizeTagFileName(importerFileName: string, tagFileName: string) {
+  return path.isAbsolute(tagFileName)
+    ? tagFileName
+    : path.resolve(path.dirname(importerFileName), tagFileName);
 }
 
 function normalizePath(fileName: string) {

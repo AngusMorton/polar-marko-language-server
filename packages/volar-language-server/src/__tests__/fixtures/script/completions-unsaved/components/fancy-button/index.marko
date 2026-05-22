@@ -1,0 +1,12 @@
+static type Tone = "info" | "warning";
+
+export interface Input extends Omit<Marko.Input<"div">, "content" | "onSelect" | "title"> {
+  message: string;
+  tone?: Tone;
+  /** Component-specific title docs. */
+  title: string;
+  /** Selection callback. */
+  onSelect?(value: string): void;
+}
+
+<div>Hello ${input.message}</div>

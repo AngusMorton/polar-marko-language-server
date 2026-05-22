@@ -94,7 +94,7 @@ describe("navigation", () => {
         (location) =>
           /components\/fancy-button\/index\.marko$/.test(
             getDefinitionUri(location),
-          ) && getDefinitionStartLine(location) === 6,
+          ) && getDefinitionStartLine(location) === 8,
       ),
       "Expected definition result for the component event declaration",
     );
@@ -110,8 +110,24 @@ describe("navigation", () => {
     assert.match(getHoverText(hover), /Input Props:[\s\S]*`message: string`/);
     assert.match(
       getHoverText(hover),
-      /Input:[\s\S]*```typescript[\s\S]*export interface Input extends Omit<Marko\.Input<"div">, "content" \| "onSelect"> \{[\s\S]*message: string;[\s\S]*tone\?: Tone;/,
+      /Input:[\s\S]*```typescript[\s\S]*export interface Input extends Omit<Marko\.Input<"div">, "content" \| "onSelect" \| "title"> \{[\s\S]*message: string;[\s\S]*tone\?: Tone;/,
     );
+    assert.doesNotMatch(getHoverText(hover), /Custom Marko tag discovered/);
+    assert.equal(countMatches(getHoverText(hover), /Input Props:/g), 1);
+  });
+
+  it("hovers imported identifier tags from component meta", async () => {
+    const hover = await requestHover(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      [
+        'import FancyButton from "./components/fancy-button/index.marko";',
+        "<FancyButton█ />",
+      ].join("\n"),
+    );
+
+    assert(hover, "Expected hover result");
+    assert.match(getHoverText(hover), /Input Props:[\s\S]*`message: string`/);
+    assert.doesNotMatch(getHoverText(hover), /Built in|HTMLElement|HTML tag/i);
   });
 
   it("hovers custom tag attrs from component meta", async () => {
@@ -122,6 +138,19 @@ describe("navigation", () => {
 
     assert(hover, "Expected hover result");
     assert.match(getHoverText(hover), /`message: string`/);
+  });
+
+  it("prefers component metadata for custom tag attrs over HTML attrs", async () => {
+    const hover = await requestHover(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      '<fancy-button title█="hello" />',
+    );
+
+    const text = getHoverText(hover!);
+    assert(hover, "Expected hover result");
+    assert.match(text, /title: string/);
+    assert.match(text, /Component-specific title docs\./);
+    assert.doesNotMatch(text, /advisory information related to the element/i);
   });
 
   it("hovers custom attr tags from component meta", async () => {
@@ -252,4 +281,8 @@ function getDefinitionStartLine(location: {
   return (
     location.targetSelectionRange?.start.line ?? location.range?.start.line
   );
+}
+
+function countMatches(value: string, pattern: RegExp) {
+  return value.match(pattern)?.length ?? 0;
 }

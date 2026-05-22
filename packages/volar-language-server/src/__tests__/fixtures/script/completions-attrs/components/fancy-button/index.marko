@@ -1,0 +1,15 @@
+static type Tone = "info" | "warning";
+
+export interface Input extends Omit<Marko.Input<"div">, "content" | "onSelect" | "title"> {
+  message: string;
+  tone?: Tone;
+  /** Component-specific title docs. */
+  title: string;
+  /** Selection callback. */
+  onSelect?(value: string): void;
+  /** Button content. */
+  content?: Marko.Body<[state: { pressed: boolean }], void>;
+}
+
+<div>Hello ${input.message}</div>
+<return={ pressed: false }/>

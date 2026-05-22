@@ -5,6 +5,7 @@ import {
 import { addMarkoTypes, createMarkoLanguagePlugin } from "@marko/language-core";
 import { Project } from "@marko/language-tools";
 import { createLanguageServicePlugin } from "@volar/typescript/lib/quickstart/createLanguageServicePlugin.js";
+import path from "path";
 
 import {
   getComponentMetaRequest,
@@ -27,7 +28,9 @@ export const init = createLanguageServicePlugin((ts, info) => {
       info.session?.addProtocolHandler(getComponentMetaRequest, (request) => {
         const args = request.arguments as GetComponentMetaRequestArgs;
         const program = info.languageService.getProgram();
-        const fileName = resolveTagFile(args.fileName, args.tagName);
+        const fileName = args.tagFileName
+          ? normalizeTagFileName(args.fileName, args.tagFileName)
+          : resolveTagFile(args.fileName, args.tagName);
 
         return {
           response:
@@ -40,3 +43,9 @@ export const init = createLanguageServicePlugin((ts, info) => {
     },
   };
 });
+
+function normalizeTagFileName(importerFileName: string, tagFileName: string) {
+  return path.isAbsolute(tagFileName)
+    ? tagFileName
+    : path.resolve(path.dirname(importerFileName), tagFileName);
+}

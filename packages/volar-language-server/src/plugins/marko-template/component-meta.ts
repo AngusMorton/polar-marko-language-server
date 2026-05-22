@@ -43,9 +43,7 @@ export function createComponentMetaManager(
       return {
         async preloadTags(tagNames) {
           await Promise.all(
-            [...tagNames].map((tagName) =>
-              loadTagMeta(normalizeTagName(tagName)),
-            ),
+            [...tagNames].map((tagName) => loadTagMeta(tagName)),
           );
         },
         getTagMetaForTag(tagName) {
@@ -79,24 +77,30 @@ export function createComponentMetaManager(
       } satisfies MarkoComponentMetaSession;
 
       function loadTagMeta(tagName: string) {
-        if (tagMetaByName.has(tagName)) {
+        const normalizedTagName = normalizeTagName(tagName);
+        if (tagMetaByName.has(normalizedTagName)) {
           return Promise.resolve();
         }
 
-        let pending = pendingTagMetaByName.get(tagName);
+        let pending = pendingTagMetaByName.get(normalizedTagName);
         if (!pending) {
+          const request = getComponentMetaRequest(root.code, normalizedTagName);
           pending = tsserver
-            .getComponentMeta(root.fileName, tagName)
+            .getComponentMeta(
+              root.fileName,
+              request.tagName,
+              request.tagFileName,
+            )
             .then((meta) => {
-              tagMetaByName.set(tagName, meta);
+              tagMetaByName.set(normalizedTagName, meta);
             })
             .catch(() => {
-              tagMetaByName.set(tagName, undefined);
+              tagMetaByName.set(normalizedTagName, undefined);
             })
             .finally(() => {
-              pendingTagMetaByName.delete(tagName);
+              pendingTagMetaByName.delete(normalizedTagName);
             });
-          pendingTagMetaByName.set(tagName, pending);
+          pendingTagMetaByName.set(normalizedTagName, pending);
         }
 
         return pending;
@@ -107,6 +111,35 @@ export function createComponentMetaManager(
 
 function normalizeTagName(tagName: string) {
   return tagName.split(":")[0]!;
+}
+
+function getComponentMetaRequest(source: string, tagName: string) {
+  const imported = getImportedTag(source, tagName);
+  if (imported) {
+    return imported;
+  }
+
+  return { tagName };
+}
+
+function getImportedTag(source: string, tagName: string) {
+  const importReg = /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["']([^"']+)["']/g;
+  let match: RegExpExecArray | null;
+  while ((match = importReg.exec(source))) {
+    if (match[1] !== tagName) {
+      continue;
+    }
+
+    const specifier = match[2]!;
+    const tagSpecifier = /^<([^>]+)>$/.exec(specifier);
+    if (tagSpecifier) {
+      return { tagName: tagSpecifier[1]! };
+    }
+
+    if (/\.marko(?:[?#].*)?$/.test(specifier)) {
+      return { tagName, tagFileName: specifier };
+    }
+  }
 }
 
 function normalizeAttrTagName(attrTagName: string) {

@@ -286,11 +286,13 @@ function extractAttrTagMeta(
   symbol: ts.Symbol,
   targetType: ts.Type,
   context: MetadataContext,
+  visited = new Set<ts.Type>(),
 ): AttrTagMeta {
   const props: InputMeta[] = [];
   const attrTags: AttrTagMeta[] = [];
   const events: EventMeta[] = [];
   let content: ContentMeta | undefined;
+  const nestedVisited = new Set(visited).add(targetType);
   const nestedTag = context.tagDef?.nestedTags
     ? Object.values(context.tagDef.nestedTags).find(
         (tag) => tag.targetProperty === symbol.getName(),
@@ -316,7 +318,11 @@ function extractAttrTagMeta(
       context.checker,
     );
     if (attrTagTarget) {
-      attrTags.push(extractAttrTagMeta(property, attrTagTarget, context));
+      if (!visited.has(attrTagTarget)) {
+        attrTags.push(
+          extractAttrTagMeta(property, attrTagTarget, context, nestedVisited),
+        );
+      }
       continue;
     }
 
@@ -941,7 +947,7 @@ function typeToString(
   const simplified = stripOptionalUndefined(type);
   if (simplified) {
     const parts = simplified.map((part) =>
-      checker.typeToString(part, context, TYPE_FORMAT_FLAGS),
+      safeTypeToString(checker, part, context),
     );
     if (
       parts.length === 2 &&
@@ -953,7 +959,23 @@ function typeToString(
     return parts.join(" | ");
   }
 
-  return checker.typeToString(type, context, TYPE_FORMAT_FLAGS);
+  return safeTypeToString(checker, type, context);
+}
+
+function safeTypeToString(
+  checker: ts.TypeChecker,
+  type: ts.Type,
+  context: ts.Node,
+) {
+  try {
+    return checker.typeToString(type, context, TYPE_FORMAT_FLAGS);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return type.getSymbol()?.getName() || "unknown";
+    }
+
+    throw error;
+  }
 }
 
 function stripOptionalUndefined(type: ts.Type) {

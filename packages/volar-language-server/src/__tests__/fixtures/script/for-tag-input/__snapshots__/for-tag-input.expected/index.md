@@ -63,6 +63,10 @@
     value: string;
     renderBody: Marko.Body;
 }> | undefined
+
+---
+
+`@option?` with `value: string` content `() => void` via `input.renderBody`
   31 |       // ^?
   32 |       ${title}
   33 |     </@option>
@@ -88,6 +92,10 @@
     value: string;
     renderBody: Marko.Body;
 }> | undefined
+
+---
+
+`@option?` with `value: string` content `() => void` via `input.renderBody`
   38 |       // ^?
   39 |       ${content}
   40 |     </@option>

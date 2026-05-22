@@ -5,6 +5,7 @@ import type {
   DocumentLink,
   DocumentSymbol,
   Hover,
+  LanguageServiceContext,
   LanguageServicePlugin,
   LanguageServicePluginInstance,
 } from "@volar/language-service";
@@ -32,12 +33,14 @@ import {
   getMarkoCompletionData,
   getScriptCompletionDocument,
   isOpenTagNameCompletionContext,
+  type MarkoTemplateContext,
   mergeCompletionLists,
   provideHtmlCompletionItems,
   provideScriptTagSymbolCompletions,
   resolveMarkoTemplateContext,
   transformSourceCompletionList,
 } from "./util";
+import { isHTML } from "./util/is-html";
 
 export const create = (
   ts: typeof import("typescript"),
@@ -94,13 +97,16 @@ export const create = (
             return;
           }
 
-          const componentMetaSession = componentMeta.prepare(
-            templateContext.root,
-            context,
-          );
-          await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext.root, templateContext.node),
-          );
+          const componentMetaSession = shouldUseMetadataCompletion(
+            templateContext,
+          )
+            ? componentMeta.prepare(templateContext.root, context)
+            : undefined;
+          if (componentMetaSession) {
+            await componentMetaSession.preloadTags(
+              getRelevantTagNames(templateContext),
+            );
+          }
           htmlService.updateCustomData(
             templateContext.root,
             context,
@@ -172,7 +178,7 @@ export const create = (
             context,
           );
           await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext.root, templateContext.node),
+            getRelevantTagNames(templateContext),
           );
 
           return provideDefinition(
@@ -193,23 +199,32 @@ export const create = (
             return;
           }
 
+          const decodedUri = context.decodeEmbeddedDocumentUri(
+            URI.parse(document.uri),
+          );
+
+          if (
+            !isTemplateHoverContext(templateContext) ||
+            shouldSkipEmbeddedSourceHover(decodedUri, templateContext)
+          ) {
+            return;
+          }
+
           if (!shouldUseHtmlHover(templateContext)) {
-            if (shouldUseMetadataHover(templateContext)) {
-              const componentMetaSession = componentMeta.prepare(
-                templateContext.root,
-                context,
-              );
+            const componentMetaSession = shouldUseMetadataHover(templateContext)
+              ? componentMeta.prepare(templateContext.root, context)
+              : undefined;
+            if (componentMetaSession) {
               await componentMetaSession.preloadTags(
-                getRelevantTagNames(templateContext.root, templateContext.node),
-              );
-              return provideHover(
-                templateContext,
-                undefined,
-                componentMetaSession,
+                getRelevantTagNames(templateContext),
               );
             }
 
-            return provideHover(templateContext, undefined);
+            return provideHover(
+              templateContext,
+              undefined,
+              componentMetaSession,
+            );
           }
 
           const componentMetaSession = componentMeta.prepare(
@@ -217,7 +232,7 @@ export const create = (
             context,
           );
           await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext.root, templateContext.node),
+            getRelevantTagNames(templateContext),
           );
           htmlService.updateCustomData(
             templateContext.root,
@@ -230,6 +245,14 @@ export const create = (
             position,
             {} as never,
           )) as Hover | null | undefined;
+          if (
+            !htmlHover &&
+            decodedUri &&
+            !shouldUseSourceHoverFallback(templateContext)
+          ) {
+            return;
+          }
+
           return provideHover(templateContext, htmlHover, componentMetaSession);
         },
         async provideDocumentLinks(
@@ -245,18 +268,7 @@ export const create = (
             return;
           }
 
-          const componentMetaSession = componentMeta.prepare(
-            templateContext.root,
-            context,
-          );
-          await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext.root),
-          );
-          htmlService.updateCustomData(
-            templateContext.root,
-            context,
-            componentMetaSession,
-          );
+          htmlService.updateCustomData(templateContext.root, context);
           return (
             (await baseServiceInstance.provideDocumentLinks?.(
               document,
@@ -277,18 +289,7 @@ export const create = (
             return;
           }
 
-          const componentMetaSession = componentMeta.prepare(
-            templateContext.root,
-            context,
-          );
-          await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext.root),
-          );
-          htmlService.updateCustomData(
-            templateContext.root,
-            context,
-            componentMetaSession,
-          );
+          htmlService.updateCustomData(templateContext.root, context);
           return (
             (await baseServiceInstance.provideDocumentSymbols?.(
               document,
@@ -411,28 +412,17 @@ function shouldUseHtmlHover(
     : never,
 ) {
   const { node, offset, root } = templateContext;
-  let targetNode =
-    node?.type === NodeType.AttrName || node?.type === NodeType.OpenTagName
-      ? node
-      : undefined;
-
-  if (!targetNode && offset > 0) {
-    const previous = root.markoAst.nodeAt(offset - 1);
-    if (
-      (previous?.type === NodeType.AttrName ||
-        previous?.type === NodeType.OpenTagName) &&
-      previous.end === offset
-    ) {
-      targetNode = previous;
-    }
-  }
+  const targetNode = getNameNodeAtOffset(root, offset, node);
 
   if (!targetNode) {
     return false;
   }
 
   if (targetNode.type === NodeType.AttrName) {
-    return true;
+    const tag = targetNode.parent.parent;
+    return (
+      tag.type !== NodeType.Tag || isNativeHtmlTag(root, tag.nameText || "")
+    );
   }
 
   if (
@@ -442,7 +432,66 @@ function shouldUseHtmlHover(
     return false;
   }
 
-  return !/^[A-Z]/.test(targetNode.parent.nameText || "");
+  const tagName = targetNode.parent.nameText || "";
+  const tagDef = root.tagLookup.getTag(tagName);
+  return (
+    isLowercaseTagName(tagName) && (!tagDef || isNativeHtmlTag(root, tagName))
+  );
+}
+
+function isTemplateHoverContext(
+  templateContext: ReturnType<
+    typeof resolveMarkoTemplateContext
+  > extends infer T
+    ? Exclude<T, undefined>
+    : never,
+) {
+  const { node, offset, root } = templateContext;
+  if (node?.type === NodeType.OpenTagName || node?.type === NodeType.AttrName) {
+    return true;
+  }
+
+  if (offset > 0) {
+    const previous = root.markoAst.nodeAt(offset - 1);
+    if (
+      (previous?.type === NodeType.AttrName ||
+        previous?.type === NodeType.OpenTagName) &&
+      previous.end === offset
+    ) {
+      return true;
+    }
+  }
+
+  return !!getAttrNameNodeAtOffset(root, offset);
+}
+
+function shouldUseMetadataCompletion(
+  templateContext: ReturnType<
+    typeof resolveMarkoTemplateContext
+  > extends infer T
+    ? Exclude<T, undefined>
+    : never,
+) {
+  const { node, offset, root } = templateContext;
+  if (
+    node?.type === NodeType.OpenTagName &&
+    node.parent.type === NodeType.Tag
+  ) {
+    return !isNativeHtmlTag(root, node.parent.nameText || "");
+  }
+
+  const attrNode = node?.type === NodeType.AttrName ? node : undefined;
+  if (!attrNode) {
+    return false;
+  }
+
+  const parentTag = attrNode.parent.parent;
+  return (
+    parentTag.type === NodeType.AttrTag ||
+    (parentTag.type === NodeType.Tag &&
+      !isNativeHtmlTag(root, parentTag.nameText || "") &&
+      offset <= attrNode.end)
+  );
 }
 
 function shouldUseMetadataHover(
@@ -453,18 +502,88 @@ function shouldUseMetadataHover(
     : never,
 ) {
   const { node, offset, root } = templateContext;
+  const targetNode = getNameNodeAtOffset(root, offset, node);
   if (
-    node?.type === NodeType.OpenTagName &&
-    node.parent.type === NodeType.AttrTag
+    targetNode?.type === NodeType.OpenTagName &&
+    targetNode.parent.type === NodeType.AttrTag
   ) {
     return true;
   }
 
+  if (
+    targetNode?.type === NodeType.OpenTagName &&
+    targetNode.parent.type === NodeType.Tag
+  ) {
+    return !isNativeHtmlTag(root, targetNode.parent.nameText || "");
+  }
+
   const attrNode =
-    node?.type === NodeType.AttrName
-      ? node
+    targetNode?.type === NodeType.AttrName
+      ? targetNode
       : getAttrNameNodeAtOffset(root, offset);
-  return attrNode?.parent.parent.type === NodeType.AttrTag;
+  const parentTag = attrNode?.parent.parent;
+  if (parentTag?.type === NodeType.AttrTag) {
+    return true;
+  }
+
+  return (
+    parentTag?.type === NodeType.Tag &&
+    !isNativeHtmlTag(root, parentTag.nameText || "")
+  );
+}
+
+function shouldUseSourceHoverFallback(
+  templateContext: ReturnType<
+    typeof resolveMarkoTemplateContext
+  > extends infer T
+    ? Exclude<T, undefined>
+    : never,
+) {
+  const targetNode = getNameNodeAtOffset(
+    templateContext.root,
+    templateContext.offset,
+    templateContext.node,
+  );
+  if (
+    targetNode?.type === NodeType.OpenTagName &&
+    targetNode.parent.type === NodeType.Tag &&
+    hasDefaultImportForTag(
+      templateContext.root.code,
+      targetNode.parent.nameText || "",
+    )
+  ) {
+    return true;
+  }
+
+  const attrNode = getAttrNameNodeAtOffset(
+    templateContext.root,
+    templateContext.offset,
+  );
+  if (!attrNode) {
+    return false;
+  }
+
+  const rawName = templateContext.root.markoAst.read(attrNode);
+  const modifierIndex = rawName.indexOf(":");
+  return (
+    modifierIndex !== -1 &&
+    templateContext.offset > attrNode.start + modifierIndex
+  );
+}
+
+function shouldSkipEmbeddedSourceHover(
+  decodedUri: ReturnType<LanguageServiceContext["decodeEmbeddedDocumentUri"]>,
+  templateContext: ReturnType<
+    typeof resolveMarkoTemplateContext
+  > extends infer T
+    ? Exclude<T, undefined>
+    : never,
+) {
+  return (
+    !!decodedUri &&
+    decodedUri[1] !== templateContext.root.id &&
+    !shouldUseSourceHoverFallback(templateContext)
+  );
 }
 
 function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
@@ -474,24 +593,23 @@ function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
   }
 
   const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
-  if (previous?.type === NodeType.AttrName) {
+  if (previous?.type === NodeType.AttrName && previous.end === offset) {
     return previous;
   }
 }
 
-function getRelevantTagNames(
-  root: MarkoVirtualCode,
-  node?: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
-) {
+function getRelevantTagNames(templateContext: MarkoTemplateContext) {
+  const { node, offset, root } = templateContext;
+  const targetNode = getNameNodeAtOffset(root, offset, node);
   const tagName =
-    node?.type === NodeType.AttrName
-      ? node.parent.parent.type === NodeType.AttrTag
-        ? node.parent.parent.owner?.nameText
-        : node.parent.parent.nameText
-      : node?.type === NodeType.OpenTagName
-        ? node.parent.type === NodeType.AttrTag
-          ? node.parent.owner?.nameText
-          : node.parent.nameText
+    targetNode?.type === NodeType.AttrName
+      ? targetNode.parent.parent.type === NodeType.AttrTag
+        ? targetNode.parent.parent.owner?.nameText
+        : targetNode.parent.parent.nameText
+      : targetNode?.type === NodeType.OpenTagName
+        ? targetNode.parent.type === NodeType.AttrTag
+          ? targetNode.parent.owner?.nameText
+          : targetNode.parent.nameText
         : undefined;
 
   if (tagName) {
@@ -502,4 +620,47 @@ function getRelevantTagNames(
     .getTagsSorted()
     .filter((tag) => !tag.html)
     .map((tag) => tag.name);
+}
+
+function getNameNodeAtOffset(
+  root: MarkoVirtualCode,
+  offset: number,
+  node?: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
+) {
+  if (node?.type === NodeType.AttrName || node?.type === NodeType.OpenTagName) {
+    return node;
+  }
+
+  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
+  if (
+    (previous?.type === NodeType.AttrName ||
+      previous?.type === NodeType.OpenTagName) &&
+    previous.end === offset
+  ) {
+    return previous;
+  }
+}
+
+function hasDefaultImportForTag(source: string, tagName: string) {
+  if (!/^[A-Za-z_$][\w$]*$/.test(tagName)) {
+    return false;
+  }
+
+  const importReg = /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["'][^"']+["']/g;
+  let match: RegExpExecArray | null;
+  while ((match = importReg.exec(source))) {
+    if (match[1] === tagName) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isNativeHtmlTag(root: MarkoVirtualCode, tagName: string) {
+  return isLowercaseTagName(tagName) && isHTML(root.tagLookup.getTag(tagName));
+}
+
+function isLowercaseTagName(tagName: string) {
+  return tagName === tagName.toLowerCase();
 }

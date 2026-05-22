@@ -27,22 +27,27 @@ export function provideDefinition(
   componentMeta?: MarkoComponentMetaSession,
 ): LocationLink[] | undefined {
   const tsDefinitions = provideTypeScriptDefinition(context, root, offset);
-  if (tsDefinitions?.length) {
+  if (!node) {
     return tsDefinitions;
   }
 
-  if (!node) {
-    return;
-  }
-
+  let templateDefinitions: LocationLink[] | undefined;
   switch (node.type) {
     case NodeType.AttrName:
-      return provideAttrDefinition(node, root, componentMeta);
+      templateDefinitions = provideAttrDefinition(node, root, componentMeta);
+      break;
     case NodeType.OpenTagName:
-      return provideTagDefinition(node, root, componentMeta);
-    default:
-      return;
+      templateDefinitions = provideTagDefinition(node, root, componentMeta);
+      break;
   }
+
+  if (templateDefinitions?.length) {
+    return tsDefinitions?.length
+      ? [...templateDefinitions, ...tsDefinitions]
+      : templateDefinitions;
+  }
+
+  return tsDefinitions;
 }
 
 function provideTypeScriptDefinition(
@@ -155,7 +160,7 @@ function provideAttrDefinition(
     attrName,
     componentMeta,
   );
-  const metaDefinitions = (inputMeta ?? eventMeta)?.declarations
+  const metaDefinitions = (eventMeta ?? inputMeta)?.declarations
     .map((declaration) =>
       declarationToLocationLink(declaration, root.markoAst.locationAt(node)),
     )
@@ -172,7 +177,7 @@ function provideAttrDefinition(
       ? tagDef?.template || tagDef?.renderer || tagDef?.filePath
       : attrDef.filePath || tagDef?.filePath;
   if (!attrEntryFile || !path.isAbsolute(attrEntryFile)) {
-    return;
+    return metaDefinitions?.length ? metaDefinitions : undefined;
   }
 
   let range = START_LOCATION;

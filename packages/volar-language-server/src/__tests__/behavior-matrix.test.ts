@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 
 import path from "path";
 import {
-  type CompletionItem,
-  type CompletionList,
   type Hover,
   type Location,
   type LocationLink,
@@ -23,52 +21,6 @@ const FIXTURE_DIR = path.join(__dirname, "fixtures");
 after(shutdownLanguageServer);
 
 describe("behavior matrix", () => {
-  it("delegates native HTML attribute value completions", async () => {
-    const completions = await requestCompletions(
-      fixturePath("script", "basic", "index.marko"),
-      '<button type="su█" />',
-    );
-    const item = getCompletion(completions, "submit");
-
-    assert.equal(getNewText(item), "submit");
-  });
-
-  it("does not delegate bound attribute value completions to HTML", async () => {
-    const completions = await requestCompletions(
-      fixturePath("script", "basic", "index.marko"),
-      ["static const submitValue = 'submit';", "<button type=su█ />"].join(
-        "\n",
-      ),
-    );
-
-    assert(
-      !completions.items.some((item) => item.label === "submit"),
-      "Expected bound expression completion to avoid HTML value suggestions",
-    );
-  });
-
-  it("does not delegate placeholders to HTML completions", async () => {
-    const completions = await requestCompletions(
-      fixturePath("script", "basic", "index.marko"),
-      "<div>${su█}</div>",
-    );
-
-    assert(
-      !completions.items.some((item) => item.label === "summary"),
-      "Expected placeholder expression completion to avoid HTML tag suggestions",
-    );
-  });
-
-  it("keeps custom tag completions available", async () => {
-    const completions = await requestCompletions(
-      fixturePath("script", "class-api-basic", "index.marko"),
-      "<fan█/>",
-    );
-    const item = getCompletion(completions, "fancy-button");
-
-    assert.equal(getNewText(item), "fancy-button");
-  });
-
   it("hovers attribute values as JavaScript expressions", async () => {
     const hover = await requestHover(
       fixturePath("script", "basic", "index.marko"),
@@ -117,75 +69,7 @@ describe("behavior matrix", () => {
 
     assert(tokens?.data.length, "Expected semantic token data");
   });
-
-  it("uses unsaved component metadata edits for completions", async () => {
-    const serverHandle = await getLanguageServer();
-    const componentFile = fixturePath(
-      "script",
-      "tags-api-basic",
-      "components",
-      "fancy-button",
-      "index.marko",
-    );
-    const usageFile = fixturePath("script", "tags-api-basic", "index.marko");
-    const componentUri = URI.file(componentFile).toString();
-    const usageState = getDocumentState(usageFile, "<fancy-button dyn█ />");
-
-    await serverHandle.openInMemoryDocument(
-      componentUri,
-      "marko",
-      [
-        'static type Tone = "info" | "warning";',
-        "",
-        'export interface Input extends Marko.Input<"div"> {',
-        "  message: string;",
-        "  dynamic: boolean;",
-        "  tone?: Tone;",
-        "}",
-        "",
-        "<div>Hello ${input.message}</div>",
-      ].join("\n"),
-    );
-    await serverHandle.openInMemoryDocument(
-      usageState.uri,
-      "marko",
-      usageState.content,
-    );
-
-    try {
-      const completions = await serverHandle.sendCompletionRequest(
-        usageState.uri,
-        usageState.position,
-      );
-      assert(completions, "Expected completions");
-      assert(getCompletion(completions, "dynamic"));
-    } finally {
-      await serverHandle.closeTextDocument(usageState.uri);
-      await serverHandle.closeTextDocument(componentUri);
-    }
-  });
 });
-
-async function requestCompletions(
-  fileName: string,
-  sourceWithCursor: string,
-): Promise<CompletionList> {
-  const serverHandle = await getLanguageServer();
-  const { content, position, uri } = getDocumentState(
-    fileName,
-    sourceWithCursor,
-  );
-
-  await serverHandle.openInMemoryDocument(uri, "marko", content);
-
-  try {
-    const completions = await serverHandle.sendCompletionRequest(uri, position);
-    assert(completions, `Expected completions for ${fileName}`);
-    return completions;
-  } finally {
-    await serverHandle.closeTextDocument(uri);
-  }
-}
 
 async function requestHover(fileName: string, sourceWithCursor: string) {
   const serverHandle = await getLanguageServer();
@@ -271,18 +155,6 @@ function getDocumentState(fileName: string, sourceWithCursor: string) {
 
 function fixturePath(...segments: string[]) {
   return path.join(FIXTURE_DIR, ...segments);
-}
-
-function getCompletion(completions: CompletionList, label: string) {
-  const item = completions.items.find((entry) => entry.label === label);
-  assert(item, `Missing completion item ${label}`);
-  return item;
-}
-
-function getNewText(item: CompletionItem) {
-  return item.textEdit && "newText" in item.textEdit
-    ? item.textEdit.newText
-    : item.insertText;
 }
 
 function getHoverText(hover: Hover) {

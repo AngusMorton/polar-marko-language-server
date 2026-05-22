@@ -3,13 +3,7 @@ import path from "node:path";
 
 import type { TagMeta } from "@marko/component-meta";
 import type { MarkupContent } from "vscode-html-languageservice";
-import { Position } from "vscode-languageserver-protocol/node";
-import { URI } from "vscode-uri";
 
-import {
-  getLanguageServer,
-  shutdownLanguageServer,
-} from "../../../__tests__/util/language-service";
 import { createMarkoDataProvider } from "../data-provider";
 import {
   createVirtualCode,
@@ -17,8 +11,6 @@ import {
 } from "../source-completions/__tests__/helpers";
 
 describe("marko-template data provider", () => {
-  after(shutdownLanguageServer);
-
   it("provides custom Marko tags as HTML data", () => {
     const fileName = fixturePath("script", "class-api-basic", "index.marko");
     const { virtualCode } = createVirtualCode(fileName, "<div█/>");
@@ -168,87 +160,6 @@ describe("marko-template data provider", () => {
       ),
       /`message: string`/,
     );
-  });
-
-  it("uses structured input metadata for docs and completions", async () => {
-    const server = await getLanguageServer();
-    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
-    const uri = URI.file(fileName).toString();
-
-    await server.openInMemoryDocument(uri, "marko", "<fancy-button on/>");
-    try {
-      const attrCompletions = await server.sendCompletionRequest(
-        uri,
-        Position.create(0, 16),
-      );
-      assert(
-        attrCompletions?.items.some((item) => item.label === "onSelect?"),
-        "Expected event input completion",
-      );
-    } finally {
-      await server.closeTextDocument(uri);
-    }
-  });
-
-  it("uses owner tag metadata for attr tag prop completions", async () => {
-    const server = await getLanguageServer();
-    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
-    const uri = URI.file(fileName).toString();
-
-    await server.openInMemoryDocument(
-      uri,
-      "marko",
-      "<fancy-button><@icon na/></fancy-button>",
-    );
-    try {
-      const completions = await server.sendCompletionRequest(
-        uri,
-        Position.create(0, 23),
-      );
-
-      assert(
-        completions?.items.some((item) => item.label === "name"),
-        "Expected attr tag prop completion from owner tag metadata",
-      );
-    } finally {
-      await server.closeTextDocument(uri);
-    }
-  });
-
-  it("uses live TypeScript program metadata after unsaved edits", async () => {
-    const server = await getLanguageServer();
-    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
-    const uri = URI.file(fileName).toString();
-    const componentUri = URI.file(
-      path.join(path.dirname(fileName), "components/fancy-button/index.marko"),
-    ).toString();
-
-    await server.openInMemoryDocument(uri, "marko", "<fancy-button mess/>");
-    await server.openTextDocument(URI.parse(componentUri).fsPath, "marko");
-    try {
-      await server.updateTextDocument(componentUri, [
-        {
-          range: {
-            start: Position.create(4, 0),
-            end: Position.create(4, 0),
-          },
-          newText: "  /** Live-only input. */\n  liveOnly?: string;\n",
-        },
-      ]);
-
-      const completions = await server.sendCompletionRequest(
-        uri,
-        Position.create(0, 18),
-      );
-      const liveOnly = completions?.items.find(
-        (item) => item.label === "liveOnly?",
-      );
-
-      assert(liveOnly, "Expected live-only input completion from unsaved edit");
-    } finally {
-      await server.closeTextDocument(uri);
-      await server.closeTextDocument(componentUri);
-    }
   });
 });
 

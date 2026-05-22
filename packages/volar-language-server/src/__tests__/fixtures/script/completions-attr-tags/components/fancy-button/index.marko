@@ -1,0 +1,11 @@
+export interface Input {
+  /** Icon attr tag. */
+  icon?: Marko.AttrTag<{
+    /** Icon name. */
+    name: string;
+    /** Icon content. */
+    content?: Marko.Body<[info: { active: boolean }], void>;
+  }>;
+}
+
+<div/>
