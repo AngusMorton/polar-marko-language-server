@@ -24,6 +24,7 @@ const pendingTsServerRequests = new Map<
   }
 >();
 let tsServerRequestId = 0;
+let componentMetaCacheVersion = 0;
 
 connection.listen();
 
@@ -79,7 +80,12 @@ connection.onInitialize((params) => {
         },
       };
     }),
-    getLanguageServicePlugins(connection, typescript, sendTsServerRequest),
+    getLanguageServicePlugins(
+      connection,
+      typescript,
+      sendTsServerRequest,
+      () => componentMetaCacheVersion,
+    ),
   );
 });
 
@@ -98,7 +104,27 @@ connection.onNotification(
 
 connection.onInitialized(() => {
   server.initialized();
-  server.fileWatcher.onDidChangeWatchedFiles(() => Project.clearCaches());
+  server.documents.onDidOpen(({ document }) => {
+    if (isComponentMetaFile(document.uri)) {
+      componentMetaCacheVersion++;
+    }
+  });
+  server.documents.onDidChangeContent(({ document }) => {
+    if (isComponentMetaFile(document.uri)) {
+      componentMetaCacheVersion++;
+    }
+  });
+  server.documents.onDidClose(({ document }) => {
+    if (isComponentMetaFile(document.uri)) {
+      componentMetaCacheVersion++;
+    }
+  });
+  server.fileWatcher.onDidChangeWatchedFiles(({ changes }) => {
+    Project.clearCaches();
+    if (changes.some((change) => isComponentMetaFile(change.uri))) {
+      componentMetaCacheVersion++;
+    }
+  });
   server.fileWatcher.watchFiles([
     `**/*.{${["js", "cjs", "mjs", "ts", "cts", "mts", "json", "marko"].join(
       ",",
@@ -149,4 +175,11 @@ function sendTsServerRequest<T>(command: string, args: unknown) {
   connection.sendNotification("tsserver/request", [id, command, args]);
 
   return promise;
+}
+
+function isComponentMetaFile(uri: string) {
+  const fileName = URI.parse(uri).fsPath;
+  return /[\\/](?:components|tags)[\\/].*\.(?:[cm]?[jt]s|marko)$/.test(
+    fileName,
+  );
 }

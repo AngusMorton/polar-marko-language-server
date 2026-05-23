@@ -40,6 +40,8 @@ export const SEMANTIC_TOKEN_MODIFIERS = [
 let serverHandle: LanguageServerHandle | undefined;
 let languageService: TestLanguageService | undefined;
 let componentMetaChecker: ComponentMetaChecker | undefined;
+let componentMetaCacheVersion = 0;
+const componentMetaRequests: ComponentMetaRequest[] = [];
 
 Project.setDefaultTypePaths({
   internalTypesFile:
@@ -115,6 +117,8 @@ export async function getLanguageServer() {
           );
         }
 
+        componentMetaRequests.push({ ...args });
+
         const fileName = args.tagFileName
           ? normalizeTagFileName(args.fileName, args.tagFileName)
           : resolveTagFile(args.fileName, args.tagName);
@@ -169,6 +173,26 @@ export async function shutdownLanguageServer() {
   serverHandle = undefined;
   languageService = undefined;
   componentMetaChecker = undefined;
+  componentMetaCacheVersion = 0;
+  resetComponentMetaRequests();
+}
+
+export function getComponentMetaCacheVersion() {
+  return componentMetaCacheVersion;
+}
+
+export function getComponentMetaRequests() {
+  return [...componentMetaRequests];
+}
+
+export function resetComponentMetaRequests() {
+  componentMetaRequests.length = 0;
+}
+
+interface ComponentMetaRequest {
+  fileName: string;
+  tagName: string;
+  tagFileName?: string;
 }
 
 type TestLanguageService = {
@@ -282,6 +306,7 @@ function syncTestLanguageServiceDocuments(
 function updateComponentMetaDocument(uri: string, text: string) {
   const fileName = URI.parse(uri).fsPath;
   if (isTagLikeFile(fileName)) {
+    componentMetaCacheVersion++;
     componentMetaChecker?.updateFile(fileName, text);
   }
 }

@@ -191,6 +191,35 @@ describe("marko-template component meta", () => {
       },
     ]);
   });
+
+  it("re-requests metadata when the backing cache version changes", async () => {
+    const calls: ComponentMetaCall[] = [];
+    let cacheVersion = 0;
+    const manager = createComponentMetaManager({
+      getCacheVersion: () => cacheVersion,
+      async getComponentMeta(fileName, tagName, tagFileName) {
+        calls.push({ fileName, tagName, tagFileName });
+        return createTagMeta(`${tagName}-${cacheVersion}`);
+      },
+    });
+    const root = createRoot("/project/index.marko", "<fancy-button />");
+    const session = manager.prepare(root);
+
+    await session.preloadTags(["fancy-button"]);
+    assert.equal(
+      session.getTagMetaForTag("fancy-button")?.file,
+      "fancy-button-0.marko",
+    );
+
+    cacheVersion++;
+    await session.preloadTags(["fancy-button"]);
+
+    assert.equal(calls.length, 2);
+    assert.equal(
+      session.getTagMetaForTag("fancy-button")?.file,
+      "fancy-button-1.marko",
+    );
+  });
 });
 
 interface ComponentMetaCall {

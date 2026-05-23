@@ -18,10 +18,14 @@ export function getLanguageServicePlugins(
   connection: Connection,
   ts: typeof import("typescript"),
   sendTsServerRequest: SendTsServerRequest,
+  getComponentMetaCacheVersion?: () => string | number | undefined,
 ) {
   const result = [
     createMarkoService(ts),
-    createMarkoTemplateService(ts, createMarkoTsServer(sendTsServerRequest)),
+    createMarkoTemplateService(
+      ts,
+      createMarkoTsServer(sendTsServerRequest, getComponentMetaCacheVersion),
+    ),
     createCssService(),
     ...createTypeScriptServices(ts),
     createTypeScriptTwoSlashService(ts),

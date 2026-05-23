@@ -8,7 +8,10 @@ import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
 
 import {
+  getComponentMetaCacheVersion,
+  getComponentMetaRequests,
   getLanguageServer,
+  resetComponentMetaRequests,
   shutdownLanguageServer,
 } from "../__tests__/util/language-service";
 
@@ -25,6 +28,7 @@ type Scenario = {
   source: string;
   run(uri: string, position: Position): Promise<unknown>;
   validate(result: unknown): void;
+  expectWarmMetaRequests?: number;
 };
 
 describe("marko-template performance", () => {
@@ -41,6 +45,7 @@ describe("marko-template performance", () => {
         validate(result) {
           assert(result, "Expected hover result");
         },
+        expectWarmMetaRequests: 0,
       },
       {
         name: "custom-input-completion",
@@ -53,6 +58,7 @@ describe("marko-template performance", () => {
             "Expected completion items",
           );
         },
+        expectWarmMetaRequests: 0,
       },
       {
         name: "custom-input-completion-after-edit",
@@ -85,6 +91,7 @@ describe("marko-template performance", () => {
             "Expected completion items",
           );
         },
+        expectWarmMetaRequests: 0,
       },
       {
         name: "native-attr-completion",
@@ -112,6 +119,7 @@ describe("marko-template performance", () => {
             "Expected definition result",
           );
         },
+        expectWarmMetaRequests: 0,
       },
     ];
 
@@ -121,6 +129,74 @@ describe("marko-template performance", () => {
     }
 
     console.table(rows);
+  });
+
+  it("re-requests component metadata after a tag file edit", async () => {
+    const server = await getLanguageServer();
+    const componentFileName = fixturePath(
+      "script",
+      "tags-api-basic",
+      "components",
+      "fancy-button",
+      "index.marko",
+    );
+    const componentUri = URI.file(componentFileName).toString();
+    const componentSource = await server.openTextDocument(
+      componentFileName,
+      "marko",
+    );
+    const { content, position, uri } = getDocumentState(
+      fixturePath("script", "tags-api-basic", "index.marko"),
+      "<fancy-button mess█/>",
+    );
+
+    await server.openInMemoryDocument(uri, "marko", content);
+
+    try {
+      await server.sendCompletionRequest(uri, position);
+      const previousVersion = getComponentMetaCacheVersion();
+      resetComponentMetaRequests();
+      await server.sendCompletionRequest(uri, position);
+      assert.equal(
+        getComponentMetaRequests().length,
+        0,
+        "Expected warmed metadata to be reused before editing",
+      );
+
+      await server.updateTextDocument(componentUri, [
+        {
+          range: {
+            start: Position.create(1, 0),
+            end: Position.create(1, 0),
+          },
+          newText: "// perf metadata edit\n",
+        },
+      ]);
+      assert(
+        getComponentMetaCacheVersion() > previousVersion,
+        "Expected component metadata cache version to advance after editing a tag file",
+      );
+
+      resetComponentMetaRequests();
+      const completion = await server.sendCompletionRequest(uri, position);
+      assert(
+        (completion as { items?: unknown[] } | undefined)?.items?.length,
+        "Expected completion items after editing component metadata",
+      );
+      assert.equal(
+        getComponentMetaRequests().length,
+        1,
+        "Expected metadata to be requested once after tag file edit",
+      );
+    } finally {
+      await server.closeTextDocument(uri);
+      await server.openInMemoryDocument(
+        componentUri,
+        "marko",
+        componentSource.getText(),
+      );
+      await server.closeTextDocument(componentUri);
+    }
   });
 });
 
@@ -138,6 +214,7 @@ async function measureScenario(scenario: Scenario) {
       scenario.validate(await scenario.run(uri, position));
     }
 
+    resetComponentMetaRequests();
     const samples: number[] = [];
     for (let i = 0; i < ITERATIONS; i++) {
       const start = performance.now();
@@ -154,9 +231,20 @@ async function measureScenario(scenario: Scenario) {
       );
     }
 
+    const metaRequests = getComponentMetaRequests().length;
+    if (scenario.expectWarmMetaRequests !== undefined) {
+      assert.equal(
+        metaRequests,
+        scenario.expectWarmMetaRequests,
+        `${scenario.name} sent ${metaRequests} warmed component metadata requests`,
+      );
+    }
+
     return {
       scenario: scenario.name,
       iterations: ITERATIONS,
+      meta_requests: metaRequests,
+      meta_requests_per_iteration: round(metaRequests / ITERATIONS),
       min_ms: round(samples[0] ?? 0),
       median_ms: round(percentile(samples, 0.5)),
       p95_ms: round(p95),

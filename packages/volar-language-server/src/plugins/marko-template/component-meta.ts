@@ -109,7 +109,11 @@ export function createComponentMetaManager(
 
     function loadTagMeta(tagName: string) {
       const normalizedTagName = normalizeTagName(tagName);
-      const cacheKey = getCacheKey(root, normalizedTagName);
+      const cacheKey = getCacheKey(
+        root,
+        normalizedTagName,
+        tsserver.getCacheVersion?.(),
+      );
       if (tagMetaByKey.has(cacheKey)) {
         markLoaded(backing, cacheKey);
         return Promise.resolve();
@@ -138,7 +142,7 @@ export function createComponentMetaManager(
     }
 
     function getSessionTagMeta(tagName: string) {
-      const cacheKey = getCacheKey(root, tagName);
+      const cacheKey = getCacheKey(root, tagName, tsserver.getCacheVersion?.());
       return backing.loadedTagKeys.has(cacheKey)
         ? tagMetaByKey.get(cacheKey)
         : undefined;
@@ -168,9 +172,14 @@ function markLoaded(
   }
 }
 
-function getCacheKey(root: MarkoVirtualCode, tagName: string) {
+function getCacheKey(
+  root: MarkoVirtualCode,
+  tagName: string,
+  cacheVersion: string | number | undefined,
+) {
   const request = getComponentMetaRequest(root.code, tagName);
   return [
+    cacheVersion ?? "",
     normalizeFileName(root.fileName),
     tagName,
     request.tagName,

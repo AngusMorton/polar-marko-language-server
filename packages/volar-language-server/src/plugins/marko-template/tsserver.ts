@@ -6,6 +6,7 @@ import {
 } from "../../ts-plugin/requests";
 
 export interface MarkoTsServer {
+  getCacheVersion?(): string | number | undefined;
   getComponentMeta(
     fileName: string,
     tagName: string,
@@ -20,8 +21,10 @@ export type SendTsServerRequest = <T>(
 
 export function createMarkoTsServer(
   sendRequest: SendTsServerRequest,
+  getCacheVersion?: () => string | number | undefined,
 ): MarkoTsServer {
   return {
+    getCacheVersion,
     getComponentMeta(fileName, tagName, tagFileName) {
       return sendRequest<TagMeta | undefined>(getComponentMetaRequest, {
         fileName,
