@@ -161,6 +161,78 @@ describe("marko-template data provider", () => {
       /`message: string`/,
     );
   });
+
+  it("reuses providers for unchanged root, context, and component meta backing", async () => {
+    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
+    const { virtualCode } = createVirtualCode(fileName, "<fancy-button mes█/>");
+    const componentMeta = createPreparedComponentMeta({
+      file: path.join(
+        path.dirname(fileName),
+        "components/fancy-button/index.marko",
+      ),
+      name: "fancy-button",
+    } as TagMeta);
+    const context = {} as never;
+
+    assert.equal(
+      createMarkoDataProvider(virtualCode, undefined, context, componentMeta),
+      createMarkoDataProvider(virtualCode, undefined, context, componentMeta),
+    );
+
+    const { virtualCode: nextVirtualCode } = createVirtualCode(
+      fileName,
+      "<fancy-button message=█/>",
+    );
+    assert.notEqual(
+      createMarkoDataProvider(virtualCode, undefined, context, componentMeta),
+      createMarkoDataProvider(
+        nextVirtualCode,
+        undefined,
+        context,
+        componentMeta,
+      ),
+    );
+  });
+
+  it("recomputes enriched tag data when component meta backing version changes", async () => {
+    const fileName = fixturePath("script", "tags-api-basic", "index.marko");
+    const { virtualCode } = createVirtualCode(fileName, "<fancy-button mes█/>");
+    const componentMeta = createPreparedComponentMeta({
+      file: path.join(
+        path.dirname(fileName),
+        "components/fancy-button/index.marko",
+      ),
+      name: "fancy-button",
+      description: "old docs",
+    } as TagMeta);
+    const provider = createMarkoDataProvider(
+      virtualCode,
+      undefined,
+      undefined,
+      componentMeta,
+    );
+
+    const firstTag = provider
+      .provideTags()
+      .find((entry) => entry.name === "fancy-button");
+    assert(firstTag, "Missing fancy-button tag data");
+    assert.match(getDescriptionValue(firstTag.description), /old docs/);
+
+    componentMeta.updateMeta({
+      file: path.join(
+        path.dirname(fileName),
+        "components/fancy-button/index.marko",
+      ),
+      name: "fancy-button",
+      description: "new docs",
+    } as TagMeta);
+
+    const secondTag = provider
+      .provideTags()
+      .find((entry) => entry.name === "fancy-button");
+    assert(secondTag, "Missing fancy-button tag data");
+    assert.match(getDescriptionValue(secondTag.description), /new docs/);
+  });
 });
 
 function isMarkupContent(value: unknown): value is MarkupContent {
@@ -168,7 +240,16 @@ function isMarkupContent(value: unknown): value is MarkupContent {
 }
 
 function createPreparedComponentMeta(meta: TagMeta) {
+  const backing = { version: 0 };
   return {
+    cacheIdentity: backing,
+    get cacheVersion() {
+      return backing.version;
+    },
+    updateMeta(nextMeta: TagMeta) {
+      meta = nextMeta;
+      backing.version++;
+    },
     async preloadTags() {},
     getTagMetaForTag(tagName: string) {
       return tagName === meta.name ? meta : undefined;
@@ -200,4 +281,8 @@ function createPreparedComponentMeta(meta: TagMeta) {
         : undefined;
     },
   };
+}
+
+function getDescriptionValue(description: unknown) {
+  return String(isMarkupContent(description) ? description.value : description);
 }

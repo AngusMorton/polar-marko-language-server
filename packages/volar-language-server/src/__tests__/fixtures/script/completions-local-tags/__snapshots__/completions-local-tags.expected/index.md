@@ -35,5 +35,5 @@ export interface Input {
 ```
 
 1. `fancy-button`
-   documentation: Custom Marko tag discovered from: [../components/fancy-button/index.marko](file://<workspace>/src/__tests__/fixtures/script/completions-local-tags/components/fancy-button/index.marko)
+   documentation: Custom Marko tag discovered from: [../components/fancy-button/index.marko](file://<workspace>/src/__tests__/fixtures/script/completions-local-tags/components/fancy-button/index.marko)...
 

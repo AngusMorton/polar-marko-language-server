@@ -16,14 +16,24 @@ import type {
   MarkoComponentMetaSession,
 } from "./component-meta";
 import {
+  getComponentMetaCacheIdentity,
+  getComponentMetaCacheVersion,
+} from "./component-meta";
+import {
   formatInputMetaDocumentation,
   formatTagMetaDocumentation,
 } from "./documentation";
 
 const HTML_DATA_PROVIDER_ID = "marko-template";
+const undefinedContext = {};
+const undefinedComponentMeta = {};
+const providerCache = new WeakMap<
+  MarkoVirtualCode,
+  WeakMap<object, WeakMap<object, IHTMLDataProvider>>
+>();
 const enrichedTagDataCache = new WeakMap<
-  MarkoComponentMetaSession,
-  ITagData[]
+  MarkoVirtualCode,
+  WeakMap<object, { version: number; tags: ITagData[] }>
 >();
 
 export function createMarkoDataProvider(
@@ -34,8 +44,27 @@ export function createMarkoDataProvider(
 ): IHTMLDataProvider {
   const componentMeta =
     preparedComponentMeta ?? componentMetaManager?.prepare(root, context);
+  const contextKey = context ?? undefinedContext;
+  const componentMetaKey =
+    getComponentMetaCacheIdentity(componentMeta) ?? undefinedComponentMeta;
+  let providersByContext = providerCache.get(root);
+  if (!providersByContext) {
+    providersByContext = new WeakMap();
+    providerCache.set(root, providersByContext);
+  }
 
-  return {
+  let providersByComponentMeta = providersByContext.get(contextKey);
+  if (!providersByComponentMeta) {
+    providersByComponentMeta = new WeakMap();
+    providersByContext.set(contextKey, providersByComponentMeta);
+  }
+
+  let provider = providersByComponentMeta.get(componentMetaKey);
+  if (provider) {
+    return provider;
+  }
+
+  provider = {
     getId: () => HTML_DATA_PROVIDER_ID,
     isApplicable: () => true,
     provideTags: () => getTagData(root, componentMeta),
@@ -44,16 +73,20 @@ export function createMarkoDataProvider(
     provideValues: (tagName, attrName) =>
       getValueData(root, tagName, attrName, componentMeta),
   };
+  providersByComponentMeta.set(componentMetaKey, provider);
+  return provider;
 }
 
 function getTagData(
   root: MarkoVirtualCode,
   componentMeta?: MarkoComponentMetaSession,
 ): ITagData[] {
-  if (componentMeta) {
-    const cached = enrichedTagDataCache.get(componentMeta);
-    if (cached) {
-      return cached;
+  const componentMetaKey = getComponentMetaCacheIdentity(componentMeta);
+  const componentMetaVersion = getComponentMetaCacheVersion(componentMeta);
+  if (componentMetaKey) {
+    const cached = enrichedTagDataCache.get(root)?.get(componentMetaKey);
+    if (cached?.version === componentMetaVersion) {
+      return cached.tags;
     }
   }
 
@@ -75,8 +108,16 @@ function getTagData(
     });
   }
 
-  if (componentMeta) {
-    enrichedTagDataCache.set(componentMeta, tags);
+  if (componentMetaKey) {
+    let cacheForRoot = enrichedTagDataCache.get(root);
+    if (!cacheForRoot) {
+      cacheForRoot = new WeakMap();
+      enrichedTagDataCache.set(root, cacheForRoot);
+    }
+    cacheForRoot.set(componentMetaKey, {
+      version: componentMetaVersion,
+      tags,
+    });
   }
 
   return tags;

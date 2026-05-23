@@ -27,6 +27,38 @@ describe("marko-template component meta", () => {
     );
   });
 
+  it("reuses the same session for unchanged root and context", () => {
+    const manager = createComponentMetaManager({
+      async getComponentMeta(fileName, tagName) {
+        return createTagMeta(tagName);
+      },
+    });
+    const root = createRoot("/project/index.marko", "<fancy-button />");
+    const context = {} as never;
+
+    assert.equal(
+      manager.prepare(root, context),
+      manager.prepare(root, context),
+    );
+    assert.notEqual(manager.prepare(root), manager.prepare(root, context));
+  });
+
+  it("updates the session cache version when new metadata becomes visible", async () => {
+    const manager = createComponentMetaManager({
+      async getComponentMeta(fileName, tagName) {
+        return createTagMeta(tagName);
+      },
+    });
+    const root = createRoot("/project/index.marko", "<fancy-button />");
+    const session = manager.prepare(root);
+
+    assert.equal(session.cacheVersion, 0);
+    await session.preloadTags(["fancy-button"]);
+    assert.equal(session.cacheVersion, 1);
+    await session.preloadTags(["fancy-button"]);
+    assert.equal(session.cacheVersion, 1);
+  });
+
   it("only exposes metadata preloaded by the current session", async () => {
     const manager = createComponentMetaManager({
       async getComponentMeta(fileName, tagName) {
@@ -36,7 +68,7 @@ describe("marko-template component meta", () => {
     const root = createRoot("/project/index.marko", "<fancy-button />");
 
     await manager.prepare(root).preloadTags(["fancy-button"]);
-    const secondSession = manager.prepare(root);
+    const secondSession = manager.prepare(root, {} as never);
 
     assert.equal(secondSession.getTagMetaForTag("fancy-button"), undefined);
   });
@@ -60,8 +92,8 @@ describe("marko-template component meta", () => {
     await Promise.all([firstLoad, secondLoad]);
 
     assert.equal(
-      manager.prepare(root).getTagMetaForTag("fancy-button"),
-      undefined,
+      manager.prepare(root).getTagMetaForTag("fancy-button")?.file,
+      "fancy-button.marko",
     );
   });
 

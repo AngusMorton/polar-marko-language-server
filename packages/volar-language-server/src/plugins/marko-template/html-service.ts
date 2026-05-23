@@ -14,6 +14,10 @@ import type {
   MarkoComponentMetaManager,
   MarkoComponentMetaSession,
 } from "./component-meta";
+import {
+  getComponentMetaCacheIdentity,
+  getComponentMetaCacheVersion,
+} from "./component-meta";
 import { createMarkoDataProvider } from "./data-provider";
 
 export function createMarkoHtmlService(
@@ -22,7 +26,8 @@ export function createMarkoHtmlService(
   let htmlData: html.IHTMLDataProvider[] = [];
   let currentRoot: MarkoVirtualCode | undefined;
   let currentContext: LanguageServiceContext | undefined;
-  let currentComponentMeta: MarkoComponentMetaSession | undefined;
+  let currentComponentMeta: object | undefined;
+  let currentComponentMetaVersion = 0;
   const listeners = new Set<() => void>();
 
   const baseService = createHtmlService({
@@ -58,22 +63,38 @@ export function createMarkoHtmlService(
     baseService,
     triggerCharacters:
       baseService.capabilities.completionProvider?.triggerCharacters ?? [],
+    async getCustomData() {
+      return htmlData;
+    },
+    onDidChangeCustomData(listener: () => void) {
+      listeners.add(listener);
+      return {
+        dispose() {
+          listeners.delete(listener);
+        },
+      };
+    },
     updateCustomData(
       root: MarkoVirtualCode,
       context?: LanguageServiceContext,
       componentMeta?: MarkoComponentMetaSession,
     ) {
+      const componentMetaIdentity =
+        getComponentMetaCacheIdentity(componentMeta);
+      const componentMetaVersion = getComponentMetaCacheVersion(componentMeta);
       if (
         currentRoot === root &&
         currentContext === context &&
-        currentComponentMeta === componentMeta
+        currentComponentMeta === componentMetaIdentity &&
+        currentComponentMetaVersion === componentMetaVersion
       ) {
         return;
       }
 
       currentRoot = root;
       currentContext = context;
-      currentComponentMeta = componentMeta;
+      currentComponentMeta = componentMetaIdentity;
+      currentComponentMetaVersion = componentMetaVersion;
       htmlData = [
         createMarkoDataProvider(
           root,
@@ -87,6 +108,8 @@ export function createMarkoHtmlService(
   } satisfies {
     baseService: LanguageServicePlugin;
     triggerCharacters: string[];
+    getCustomData(): Promise<html.IHTMLDataProvider[]>;
+    onDidChangeCustomData(listener: () => void): { dispose(): void };
     updateCustomData(
       root: MarkoVirtualCode,
       context?: LanguageServiceContext,
