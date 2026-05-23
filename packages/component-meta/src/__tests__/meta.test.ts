@@ -171,4 +171,46 @@ describe("marko-component-meta", () => {
       true,
     );
   });
+
+  it("reuses cached metadata while files are unchanged", () => {
+    const checker = createChecker(tsconfig);
+    const meta = checker.getTagMeta(fancyButtonFile);
+
+    assert.equal(checker.getTagMeta(fancyButtonFile), meta);
+  });
+
+  it("closes edited files back to disk state", () => {
+    const checker = createChecker(tsconfig);
+    const source = fs.readFileSync(fancyButtonFile, "utf-8");
+
+    checker.updateFile(
+      fancyButtonFile,
+      source.replace("message: T;", "message: T;\n  added: string;"),
+    );
+    assert.equal(
+      checker
+        .getTagMeta(fancyButtonFile)
+        .input?.props.some((prop) => prop.name === "added"),
+      true,
+    );
+
+    checker.closeFile(fancyButtonFile);
+    assert.equal(
+      checker
+        .getTagMeta(fancyButtonFile)
+        .input?.props.some((prop) => prop.name === "added"),
+      false,
+    );
+  });
+
+  it("treats deleted files as unavailable", () => {
+    const checker = createChecker(tsconfig);
+
+    checker.deleteFile(fancyButtonFile);
+
+    assert.throws(
+      () => checker.getTagMeta(fancyButtonFile),
+      /Could not load Marko source file/,
+    );
+  });
 });

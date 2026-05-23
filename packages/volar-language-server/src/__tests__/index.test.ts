@@ -253,7 +253,13 @@ function getDiagnosticSourcePriority(source: string | undefined) {
 }
 
 function normalizeMessage(message: string) {
-  return message.split(process.cwd()).join("<workspace>");
+  return message
+    .split(process.cwd())
+    .join("<workspace>")
+    .replace(
+      /type 'AttrMissing \| "button" \| "submit" \| "reset"'/g,
+      'type \'"button" | AttrMissing | "submit" | "reset"\'',
+    );
 }
 
 // if (SHOULD_BENCH) {

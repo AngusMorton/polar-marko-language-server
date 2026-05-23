@@ -732,8 +732,9 @@ function mapDeclaration(
     extracted && normalizePath(extracted.parsed.filename) === declarationFile
       ? normalizePath(extracted.parsed.filename)
       : declarationFile;
-  const start = declaration.getStart();
-  const end = declaration.getEnd();
+  const target = getDeclarationTarget(declaration);
+  const start = target.getStart(declarationSourceFile);
+  const end = target.getEnd();
 
   if (extracted && normalizePath(extracted.parsed.filename) === file) {
     const sourceRange = extracted.sourceRangeAt(start, end);
@@ -743,6 +744,11 @@ function mapDeclaration(
   }
 
   return { file, range: [start, end] };
+}
+
+function getDeclarationTarget(declaration: ts.Declaration): ts.Node {
+  const namedDeclaration = declaration as ts.Declaration & { name?: ts.Node };
+  return namedDeclaration.name ?? declaration;
 }
 
 function unwrapAttrTagType(

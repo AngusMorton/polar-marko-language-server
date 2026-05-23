@@ -115,18 +115,26 @@ export async function getLanguageServer() {
           );
         }
 
-        const program = languageService?.service.getProgram();
         const fileName = args.tagFileName
           ? normalizeTagFileName(args.fileName, args.tagFileName)
           : resolveTagFile(args.fileName, args.tagName);
+        let meta;
+        if (fileName) {
+          try {
+            meta = componentMetaChecker?.getTagMeta(fileName);
+          } catch {
+            meta = undefined;
+          }
+        }
+        const program = meta
+          ? undefined
+          : languageService?.service.getProgram();
         return serverHandle?.connection.sendNotification("tsserver/response", [
           id,
-          fileName
-            ? (componentMetaChecker?.getTagMeta(fileName) ??
-              (program
-                ? extractTagMetaFromProgram(ts, program, fileName)
-                : undefined))
-            : undefined,
+          meta ??
+            (fileName && program
+              ? extractTagMetaFromProgram(ts, program, fileName)
+              : undefined),
         ]);
       },
     );
@@ -266,7 +274,7 @@ function syncTestLanguageServiceDocuments(
     await closeTextDocument(uri);
     languageService.closeScript(fileName);
     if (isTagLikeFile(fileName)) {
-      componentMetaChecker?.clearCache();
+      componentMetaChecker?.closeFile(fileName);
     }
   };
 }

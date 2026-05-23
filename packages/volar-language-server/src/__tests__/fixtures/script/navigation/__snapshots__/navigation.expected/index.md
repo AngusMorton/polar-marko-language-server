@@ -261,49 +261,15 @@ Icon attr tag.
   14 | <FancyButton />
 ```
 
-1. components/fancy-button/index.marko:3:1
+1. components/fancy-button/index.marko:3:10
 ```marko
-   1 | static type Tone = "info" | "warning";
-   2 |
->  3 | export interface Input {
-     | ^^^^^^^^^^^^^^^^^^^^^^^^
->  4 |   message?: string;
-     | ^^^^^^^^^^^^^^^^^^^
->  5 |   tone?: Tone;
-     | ^^^^^^^^^^^^^^^^^^^
->  6 |   custom?: { temp: boolean; options: boolean };
-     | ^^^^^^^^^^^^^^^^^^^
->  7 |   /** Component-specific title docs. */
-     | ^^^^^^^^^^^^^^^^^^^
->  8 |   title?: string;
-     | ^^^^^^^^^^^^^^^^^^^
->  9 |   /** Selection callback. */
-     | ^^^^^^^^^^^^^^^^^^^
-> 10 |   onSelect?(value: string): void;
-     | ^^^^^^^^^^^^^^^^^^^
-> 11 |   /** Icon attr tag. */
-     | ^^^^^^^^^^^^^^^^^^^
-> 12 |   icon?: Marko.AttrTag<{
-     | ^^^^^^^^^^^^^^^^^^^
-> 13 |     /** Icon name. */
-     | ^^^^^^^^^^^^^^^^^^^
-> 14 |     name: string;
-     | ^^^^^^^^^^^^^^^^^^^
-> 15 |     /** Icon content. */
-     | ^^^^^^^^^^^^^^^^^^^
-> 16 |     content?: Marko.Body<[info: { active: boolean }], void>;
-     | ^^^^^^^^^^^^^^^^^^^
-> 17 |   }>;
-     | ^^^^^^^^^^^^^^^^^^^
-> 18 |   /** Button content. */
-     | ^^^^^^^^^^^^^^^^^^^
-> 19 |   content?: Marko.Body<[state: { pressed: boolean }], void>;
-     | ^^^^^^^^^^^^^^^^^^^
-> 20 | }
-     | ^^ definition
-  21 |
-  22 | <div>Hello ${input.message ?? "friend"}</div>
-  23 | <return={ pressed: false }/>
+  1 | static type Tone = "info" | "warning";
+  2 |
+> 3 | export interface Input {
+    |          ^^^^^ definition
+  4 |   message?: string;
+  5 |   tone?: Tone;
+  6 |   custom?: { temp: boolean; options: boolean };
 ```
 2. components/fancy-button/index.marko:1:1
 ```marko
@@ -375,14 +341,5 @@ Icon attr tag.
   2 |   value: (next: string) => string;
   3 | }
   4 |
-```
-3. tags/child.marko:2:3
-```marko
-  1 | export interface Input {
-> 2 |   value: (next: string) => string;
-    |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ definition
-  3 | }
-  4 |
-  5 | <div/>
 ```
 

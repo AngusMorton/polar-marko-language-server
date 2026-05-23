@@ -55,6 +55,9 @@ export function createPatchedHost(
   const baseReadFile = host.readFile.bind(host);
   host.readFile = (fileName) => {
     const realFileName = toRealFileName(fileName);
+    if (!state.fileExists(realFileName)) {
+      return;
+    }
     const extracted = getExtracted(realFileName);
     if (extracted?.virtualFileName === normalizePath(fileName)) {
       return extracted.toString();
@@ -62,10 +65,9 @@ export function createPatchedHost(
     return state.readFile(realFileName) ?? baseReadFile(realFileName);
   };
 
-  const baseFileExists = host.fileExists.bind(host);
   host.fileExists = (fileName) => {
     const realFileName = toRealFileName(fileName);
-    return state.fileExists(realFileName) || baseFileExists(realFileName);
+    return state.fileExists(realFileName);
   };
 
   host.readDirectory = (dir, extensions, exclude, include, depth) =>
@@ -85,6 +87,9 @@ export function createPatchedHost(
     shouldCreateNewSourceFile,
   ) => {
     const realFileName = toRealFileName(fileName);
+    if (!state.fileExists(realFileName)) {
+      return;
+    }
     const extracted = getExtracted(realFileName);
     if (extracted?.virtualFileName === normalizePath(fileName)) {
       return extracted.sourceFile;
