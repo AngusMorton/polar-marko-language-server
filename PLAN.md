@@ -23,7 +23,7 @@ Run it with:
 - `npm run build -w @marko/volar-language-server`
 - `npm run perf -w @marko/volar-language-server`
 
-It measures repeated hover, completion, and definition requests through `@volar/test-utils` and prints min/median/p95/max/mean timings. Optional thresholding is available with `MARKO_PERF_MAX_P95_MS`.
+It measures repeated hover, completion, and definition requests through `@volar/test-utils` and prints min/median/p95/max/mean timings. Optional threshold checks are available with `MARKO_PERF_MAX_P95_MS`.
 
 ## Performance Measurements
 
