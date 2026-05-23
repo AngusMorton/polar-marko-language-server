@@ -35,10 +35,12 @@ export interface MarkoComponentMetaManager {
 export function createComponentMetaManager(
   tsserver: MarkoTsServer,
 ): MarkoComponentMetaManager {
+  const tagMetaByKey = new Map<string, TagMeta | undefined>();
+  const pendingTagMetaByKey = new Map<string, Promise<void>>();
+
   return {
     prepare(root) {
-      const tagMetaByName = new Map<string, TagMeta | undefined>();
-      const pendingTagMetaByName = new Map<string, Promise<void>>();
+      const loadedTagKeys = new Set<string>();
 
       return {
         async preloadTags(tagNames) {
@@ -47,28 +49,27 @@ export function createComponentMetaManager(
           );
         },
         getTagMetaForTag(tagName) {
-          return tagMetaByName.get(normalizeTagName(tagName));
+          return getSessionTagMeta(normalizeTagName(tagName));
         },
         getInputMetaForTag(tagName, attrName) {
-          return tagMetaByName
-            .get(normalizeTagName(tagName))
-            ?.input?.props.find((input) => input.name === attrName);
+          return getSessionTagMeta(
+            normalizeTagName(tagName),
+          )?.input?.props.find((input) => input.name === attrName);
         },
         getEventMetaForTag(tagName, eventName) {
-          return tagMetaByName
-            .get(normalizeTagName(tagName))
-            ?.input?.events.find((event) => event.name === eventName);
+          return getSessionTagMeta(
+            normalizeTagName(tagName),
+          )?.input?.events.find((event) => event.name === eventName);
         },
         getAttrTagMetaForTag(tagName, attrTagName) {
-          return tagMetaByName
-            .get(normalizeTagName(tagName))
-            ?.input?.attrTags.find((attrTag) =>
-              isAttrTagMatch(attrTag, attrTagName),
-            );
+          return getSessionTagMeta(
+            normalizeTagName(tagName),
+          )?.input?.attrTags.find((attrTag) =>
+            isAttrTagMatch(attrTag, attrTagName),
+          );
         },
         getAttrTagInputMetaForTag(tagName, attrTagName, attrName) {
-          return tagMetaByName
-            .get(normalizeTagName(tagName))
+          return getSessionTagMeta(normalizeTagName(tagName))
             ?.input?.attrTags.find((attrTag) =>
               isAttrTagMatch(attrTag, attrTagName),
             )
@@ -78,11 +79,13 @@ export function createComponentMetaManager(
 
       function loadTagMeta(tagName: string) {
         const normalizedTagName = normalizeTagName(tagName);
-        if (tagMetaByName.has(normalizedTagName)) {
+        const cacheKey = getCacheKey(root, normalizedTagName);
+        if (tagMetaByKey.has(cacheKey)) {
+          loadedTagKeys.add(cacheKey);
           return Promise.resolve();
         }
 
-        let pending = pendingTagMetaByName.get(normalizedTagName);
+        let pending = pendingTagMetaByKey.get(cacheKey);
         if (!pending) {
           const request = getComponentMetaRequest(root.code, normalizedTagName);
           pending = tsserver
@@ -92,21 +95,46 @@ export function createComponentMetaManager(
               request.tagFileName,
             )
             .then((meta) => {
-              tagMetaByName.set(normalizedTagName, meta);
+              tagMetaByKey.set(cacheKey, meta);
+              loadedTagKeys.add(cacheKey);
             })
             .catch(() => {
-              tagMetaByName.set(normalizedTagName, undefined);
+              tagMetaByKey.set(cacheKey, undefined);
+              loadedTagKeys.add(cacheKey);
             })
             .finally(() => {
-              pendingTagMetaByName.delete(normalizedTagName);
+              pendingTagMetaByKey.delete(cacheKey);
             });
-          pendingTagMetaByName.set(normalizedTagName, pending);
+          pendingTagMetaByKey.set(cacheKey, pending);
         }
 
-        return pending;
+        return pending.then(() => {
+          loadedTagKeys.add(cacheKey);
+        });
+      }
+
+      function getSessionTagMeta(tagName: string) {
+        const cacheKey = getCacheKey(root, tagName);
+        return loadedTagKeys.has(cacheKey)
+          ? tagMetaByKey.get(cacheKey)
+          : undefined;
       }
     },
   } satisfies MarkoComponentMetaManager;
+}
+
+function getCacheKey(root: MarkoVirtualCode, tagName: string) {
+  const request = getComponentMetaRequest(root.code, tagName);
+  return [
+    normalizeFileName(root.fileName),
+    tagName,
+    request.tagName,
+    request.tagFileName ?? "",
+  ].join("\0");
+}
+
+function normalizeFileName(fileName: string) {
+  return fileName.replace(/\\/g, "/");
 }
 
 function normalizeTagName(tagName: string) {
