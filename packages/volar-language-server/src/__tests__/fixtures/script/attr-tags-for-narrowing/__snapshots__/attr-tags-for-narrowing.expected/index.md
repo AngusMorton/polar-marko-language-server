@@ -5,6 +5,12 @@
   2 |   <for of=[1, 2, 3]>
 > 3 |     <@item size="small"/>
     |              ^ (property) "size": "small"
+
+---
+
+`size?: "small" | "large"`
+
+Values: `small`, `large`
   4 |           // ^?
   5 |   </for>
   6 |   <for of=[1, 2, 3]>
@@ -16,6 +22,12 @@
    6 |   <for of=[1, 2, 3]>
 >  7 |     <@item size="small"/>
      |              ^ (property) "size": "small"
+
+---
+
+`size?: "small" | "large"`
+
+Values: `small`, `large`
    8 |           // ^?
    9 |     <@item size="huge"/>
   10 |           // ^?
@@ -27,6 +39,12 @@
    8 |           // ^?
 >  9 |     <@item size="huge"/>
      |              ^ (property) "size": "huge"
+
+---
+
+`size?: "small" | "large"`
+
+Values: `small`, `large`
   10 |           // ^?
   11 |   </for>
   12 | </list>

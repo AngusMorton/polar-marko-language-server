@@ -97,15 +97,13 @@ export const create = (
             return;
           }
 
-          const componentMetaSession = shouldUseMetadataCompletion(
-            templateContext,
-          )
+          const completionMetaTagNames =
+            getCompletionMetaTagNames(templateContext);
+          const componentMetaSession = completionMetaTagNames.length
             ? componentMeta.prepare(templateContext.root, context)
             : undefined;
           if (componentMetaSession) {
-            await componentMetaSession.preloadTags(
-              getRelevantTagNames(templateContext),
-            );
+            await componentMetaSession.preloadTags(completionMetaTagNames);
           }
           htmlService.updateCustomData(
             templateContext.root,
@@ -173,13 +171,14 @@ export const create = (
             return;
           }
 
-          const componentMetaSession = componentMeta.prepare(
-            templateContext.root,
-            context,
-          );
-          await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext),
-          );
+          const definitionMetaTagNames =
+            getDefinitionMetaTagNames(templateContext);
+          const componentMetaSession = definitionMetaTagNames.length
+            ? componentMeta.prepare(templateContext.root, context)
+            : undefined;
+          if (componentMetaSession) {
+            await componentMetaSession.preloadTags(definitionMetaTagNames);
+          }
 
           return provideDefinition(
             context,
@@ -211,13 +210,12 @@ export const create = (
           }
 
           if (!shouldUseHtmlHover(templateContext)) {
-            const componentMetaSession = shouldUseMetadataHover(templateContext)
+            const hoverMetaTagNames = getHoverMetaTagNames(templateContext);
+            const componentMetaSession = hoverMetaTagNames.length
               ? componentMeta.prepare(templateContext.root, context)
               : undefined;
             if (componentMetaSession) {
-              await componentMetaSession.preloadTags(
-                getRelevantTagNames(templateContext),
-              );
+              await componentMetaSession.preloadTags(hoverMetaTagNames);
             }
 
             return provideHover(
@@ -227,18 +225,7 @@ export const create = (
             );
           }
 
-          const componentMetaSession = componentMeta.prepare(
-            templateContext.root,
-            context,
-          );
-          await componentMetaSession.preloadTags(
-            getRelevantTagNames(templateContext),
-          );
-          htmlService.updateCustomData(
-            templateContext.root,
-            context,
-            componentMetaSession,
-          );
+          htmlService.updateCustomData(templateContext.root, context);
 
           const htmlHover = (await baseServiceInstance.provideHover?.(
             document,
@@ -253,7 +240,7 @@ export const create = (
             return;
           }
 
-          return provideHover(templateContext, htmlHover, componentMetaSession);
+          return provideHover(templateContext, htmlHover);
         },
         async provideDocumentLinks(
           document,
@@ -421,7 +408,7 @@ function shouldUseHtmlHover(
   if (targetNode.type === NodeType.AttrName) {
     const tag = targetNode.parent.parent;
     return (
-      tag.type !== NodeType.Tag || isNativeHtmlTag(root, tag.nameText || "")
+      tag.type === NodeType.Tag && isNativeHtmlTag(root, tag.nameText || "")
     );
   }
 
@@ -465,71 +452,42 @@ function isTemplateHoverContext(
   return !!getAttrNameNodeAtOffset(root, offset);
 }
 
-function shouldUseMetadataCompletion(
-  templateContext: ReturnType<
-    typeof resolveMarkoTemplateContext
-  > extends infer T
-    ? Exclude<T, undefined>
-    : never,
-) {
+function getCompletionMetaTagNames(templateContext: MarkoTemplateContext) {
   const { node, offset, root } = templateContext;
-  if (
-    node?.type === NodeType.OpenTagName &&
-    node.parent.type === NodeType.Tag
-  ) {
-    return !isNativeHtmlTag(root, node.parent.nameText || "");
+  if (node?.type === NodeType.OpenTagName) {
+    const tag = node.parent;
+    return tag.type === NodeType.AttrTag && tag.owner?.nameText
+      ? [tag.owner.nameText]
+      : [];
   }
 
   const attrNode = node?.type === NodeType.AttrName ? node : undefined;
   if (!attrNode) {
-    return false;
+    return [];
   }
 
   const parentTag = attrNode.parent.parent;
-  return (
-    parentTag.type === NodeType.AttrTag ||
-    (parentTag.type === NodeType.Tag &&
-      !isNativeHtmlTag(root, parentTag.nameText || "") &&
-      offset <= attrNode.end)
-  );
+  if (parentTag.type === NodeType.AttrTag) {
+    return parentTag.owner?.nameText ? [parentTag.owner.nameText] : [];
+  }
+
+  if (
+    parentTag.type === NodeType.Tag &&
+    offset <= attrNode.end &&
+    !isNativeHtmlTag(root, parentTag.nameText || "")
+  ) {
+    return parentTag.nameText ? [parentTag.nameText] : [];
+  }
+
+  return [];
 }
 
-function shouldUseMetadataHover(
-  templateContext: ReturnType<
-    typeof resolveMarkoTemplateContext
-  > extends infer T
-    ? Exclude<T, undefined>
-    : never,
-) {
-  const { node, offset, root } = templateContext;
-  const targetNode = getNameNodeAtOffset(root, offset, node);
-  if (
-    targetNode?.type === NodeType.OpenTagName &&
-    targetNode.parent.type === NodeType.AttrTag
-  ) {
-    return true;
-  }
+function getDefinitionMetaTagNames(templateContext: MarkoTemplateContext) {
+  return getConcreteMetaTagNames(templateContext, true);
+}
 
-  if (
-    targetNode?.type === NodeType.OpenTagName &&
-    targetNode.parent.type === NodeType.Tag
-  ) {
-    return !isNativeHtmlTag(root, targetNode.parent.nameText || "");
-  }
-
-  const attrNode =
-    targetNode?.type === NodeType.AttrName
-      ? targetNode
-      : getAttrNameNodeAtOffset(root, offset);
-  const parentTag = attrNode?.parent.parent;
-  if (parentTag?.type === NodeType.AttrTag) {
-    return true;
-  }
-
-  return (
-    parentTag?.type === NodeType.Tag &&
-    !isNativeHtmlTag(root, parentTag.nameText || "")
-  );
+function getHoverMetaTagNames(templateContext: MarkoTemplateContext) {
+  return getConcreteMetaTagNames(templateContext, false);
 }
 
 function shouldUseSourceHoverFallback(
@@ -598,28 +556,42 @@ function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
   }
 }
 
-function getRelevantTagNames(templateContext: MarkoTemplateContext) {
+function getConcreteMetaTagNames(
+  templateContext: MarkoTemplateContext,
+  requireCustomTag: boolean,
+) {
   const { node, offset, root } = templateContext;
   const targetNode = getNameNodeAtOffset(root, offset, node);
-  const tagName =
-    targetNode?.type === NodeType.AttrName
-      ? targetNode.parent.parent.type === NodeType.AttrTag
-        ? targetNode.parent.parent.owner?.nameText
-        : targetNode.parent.parent.nameText
-      : targetNode?.type === NodeType.OpenTagName
-        ? targetNode.parent.type === NodeType.AttrTag
-          ? targetNode.parent.owner?.nameText
-          : targetNode.parent.nameText
-        : undefined;
 
-  if (tagName) {
-    return [tagName];
+  if (targetNode?.type === NodeType.AttrName) {
+    const tag = targetNode.parent.parent;
+    if (tag.type === NodeType.AttrTag) {
+      return tag.owner?.nameText ? [tag.owner.nameText] : [];
+    }
+
+    return getCustomTagMetaName(root, tag.nameText || "", requireCustomTag);
   }
 
-  return root.tagLookup
-    .getTagsSorted()
-    .filter((tag) => !tag.html)
-    .map((tag) => tag.name);
+  if (targetNode?.type === NodeType.OpenTagName) {
+    const tag = targetNode.parent;
+    if (tag.type === NodeType.AttrTag) {
+      return tag.owner?.nameText ? [tag.owner.nameText] : [];
+    }
+
+    return getCustomTagMetaName(root, tag.nameText || "", requireCustomTag);
+  }
+
+  return [];
+}
+
+function getCustomTagMetaName(
+  root: MarkoVirtualCode,
+  tagName: string,
+  requireCustomTag: boolean,
+) {
+  return tagName && (!requireCustomTag || !isNativeHtmlTag(root, tagName))
+    ? [tagName]
+    : [];
 }
 
 function getNameNodeAtOffset(
