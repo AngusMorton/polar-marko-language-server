@@ -1,0 +1,23 @@
+static type Tone = "info" | "warning";
+
+export interface Input {
+  message?: string;
+  tone?: Tone;
+  custom?: { temp: boolean; options: boolean };
+  /** Component-specific title docs. */
+  title?: string;
+  /** Selection callback. */
+  onSelect?(value: string): void;
+  /** Icon attr tag. */
+  icon?: Marko.AttrTag<{
+    /** Icon name. */
+    name: string;
+    /** Icon content. */
+    content?: Marko.Body<[info: { active: boolean }], void>;
+  }>;
+  /** Button content. */
+  content?: Marko.Body<[state: { pressed: boolean }], void>;
+}
+
+<div>Hello ${input.message ?? "friend"}</div>
+<return={ pressed: false }/>

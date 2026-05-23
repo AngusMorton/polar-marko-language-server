@@ -5,7 +5,12 @@ import path from "path";
 import {
   type CompletionItem,
   CompletionItemKind,
+  type DocumentLink,
+  type Location,
+  type LocationLink,
   Position,
+  Range,
+  type SemanticTokens,
 } from "vscode-languageserver";
 // import { bench, run } from "mitata";
 import { TextDocument } from "vscode-languageserver-textdocument";
@@ -14,6 +19,8 @@ import { URI } from "vscode-uri";
 import { codeFrame } from "./util/code-frame";
 import {
   getLanguageServer,
+  SEMANTIC_TOKEN_MODIFIERS,
+  SEMANTIC_TOKEN_TYPES,
   shutdownLanguageServer,
 } from "./util/language-service";
 
@@ -42,6 +49,8 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
         serverHandle,
         fixtureDir,
       );
+      const shouldSnapshotGeneratedOutput =
+        subdir !== "document-links" && subdir !== "semantic-tokens";
 
       try {
         for (const filename of loadMarkoFiles(fixtureDir)) {
@@ -54,13 +63,16 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
 
           let results = "";
 
-          for (const position of getHovers(doc)) {
+          for (const { position, useHoverRange } of getHovers(doc)) {
             const hoverInfo = await serverHandle.sendHoverRequest(
               doc.uri,
               position,
             );
 
-            const loc = { start: position, end: position };
+            const loc =
+              useHoverRange && hoverInfo?.range
+                ? hoverInfo.range
+                : { start: position, end: position };
 
             let message = "";
             const contents = hoverInfo?.contents;
@@ -111,6 +123,23 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
             results += `## Completions\n${completionResults}`;
           }
 
+          let definitionResults = "";
+          for (const position of getDefinitions(doc)) {
+            const definitions = toDefinitionList(
+              await serverHandle.sendDefinitionRequest(doc.uri, position),
+            );
+            const loc = { start: position, end: position };
+
+            definitionResults += `### Ln ${position.line + 1}, Col ${
+              position.character + 1
+            }\n\`\`\`marko\n${codeFrame(code, "definition", loc)}\n\`\`\`\n\n`;
+            definitionResults += renderDefinitions(definitions, fixtureDir);
+          }
+
+          if (definitionResults.length) {
+            results += `## Definitions\n${definitionResults}`;
+          }
+
           const scriptOutput:
             | {
                 language: string;
@@ -119,7 +148,7 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
             | undefined = await serverHandle.sendExecuteCommandRequest(
             "marko.debug.showScriptOutput",
           );
-          if (scriptOutput) {
+          if (scriptOutput && shouldSnapshotGeneratedOutput) {
             await snapshot(scriptOutput.content, {
               file: path.relative(
                 fixtureDir,
@@ -140,7 +169,7 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
             | undefined = await serverHandle.sendExecuteCommandRequest(
             "marko.debug.showHtmlOutput",
           );
-          if (htmlOutput) {
+          if (htmlOutput && shouldSnapshotGeneratedOutput) {
             await snapshot(htmlOutput.content, {
               file: path.relative(
                 fixtureDir,
@@ -182,15 +211,30 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
             }
           }
 
+          if (subdir === "document-links") {
+            const links = await serverHandle.sendDocumentLinkRequest(doc.uri);
+            results += `## Document Links\n${renderDocumentLinks(links ?? [], code, fixtureDir)}\n`;
+          }
+
+          if (subdir === "semantic-tokens") {
+            const tokens = await serverHandle.sendSemanticTokensRangeRequest(
+              doc.uri,
+              Range.create(Position.create(0, 0), doc.positionAt(code.length)),
+            );
+            results += `## Semantic Tokens\n${renderSemanticTokens(tokens, doc)}\n`;
+          }
+
           await serverHandle.closeTextDocument(doc.uri);
 
-          await snapshot(results, {
-            file: path.relative(
-              fixtureDir,
-              filename.replace(/\.marko$/, ".md"),
-            ),
-            dir: fixtureDir,
-          });
+          if (results.length) {
+            await snapshot(results, {
+              file: path.relative(
+                fixtureDir,
+                filename.replace(/\.marko$/, ".md"),
+              ),
+              dir: fixtureDir,
+            });
+          }
         }
       } finally {
         for (const uri of unsavedDocuments) {
@@ -220,8 +264,23 @@ function normalizeMessage(message: string) {
 //   });
 // }
 
-function* getHovers(doc: TextDocument): Generator<Position> {
-  for (const { index } of doc.getText().matchAll(/\^\?/g)) {
+function* getHovers(
+  doc: TextDocument,
+): Generator<{ position: Position; useHoverRange: boolean }> {
+  for (const { 0: marker, index } of doc.getText().matchAll(/\^(\?|~)/g)) {
+    const pos = doc.positionAt(index!);
+    yield {
+      position: {
+        line: pos.line - 1,
+        character: pos.character,
+      },
+      useHoverRange: marker === "^~",
+    };
+  }
+}
+
+function* getCompletions(doc: TextDocument): Generator<Position> {
+  for (const { index } of doc.getText().matchAll(/\^\|/g)) {
     const pos = doc.positionAt(index!);
     yield {
       line: pos.line - 1,
@@ -230,8 +289,8 @@ function* getHovers(doc: TextDocument): Generator<Position> {
   }
 }
 
-function* getCompletions(doc: TextDocument): Generator<Position> {
-  for (const { index } of doc.getText().matchAll(/\^\|/g)) {
+function* getDefinitions(doc: TextDocument): Generator<Position> {
+  for (const { index } of doc.getText().matchAll(/\^!/g)) {
     const pos = doc.positionAt(index!);
     yield {
       line: pos.line - 1,
@@ -324,6 +383,143 @@ function formatInline(value: string) {
     .replace(/\s+/g, " ")
     .replace(/`/g, "\\`")
     .trim();
+}
+
+function toDefinitionList(
+  definitions: Location | Location[] | LocationLink[] | null | undefined,
+) {
+  if (!definitions) return [];
+  return Array.isArray(definitions) ? definitions : [definitions];
+}
+
+function renderDefinitions(
+  definitions: Array<Location | LocationLink>,
+  fixtureDir: string,
+) {
+  if (!definitions.length) {
+    return "No definitions.\n\n";
+  }
+
+  let results = "";
+  definitions = dedupeDefinitions(definitions);
+
+  for (const [index, definition] of definitions.entries()) {
+    const uri = getDefinitionUri(definition);
+    const range = getDefinitionRange(definition);
+    results += `${index + 1}. ${formatUri(uri, fixtureDir)}:${
+      range.start.line + 1
+    }:${range.start.character + 1}\n`;
+    results += renderTargetFrame(uri, range);
+  }
+
+  return `${results}\n`;
+}
+
+function dedupeDefinitions(definitions: Array<Location | LocationLink>) {
+  const seen = new Set<string>();
+  return definitions.filter((definition) => {
+    const uri = getDefinitionUri(definition);
+    const range = getDefinitionRange(definition);
+    const key = `${uri}:${range.start.line}:${range.start.character}:${range.end.line}:${range.end.character}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getDefinitionUri(definition: Location | LocationLink) {
+  return "targetUri" in definition ? definition.targetUri : definition.uri;
+}
+
+function getDefinitionRange(definition: Location | LocationLink) {
+  return "targetSelectionRange" in definition
+    ? definition.targetSelectionRange
+    : definition.range;
+}
+
+function renderTargetFrame(uri: string, range: Range) {
+  const fsPath = URI.parse(uri).fsPath;
+  if (!fsPath || !fs.existsSync(fsPath)) {
+    return "";
+  }
+
+  const language = fsPath.endsWith(".marko") ? "marko" : "typescript";
+  return `\`\`\`${language}\n${codeFrame(
+    fs.readFileSync(fsPath, "utf8"),
+    "definition",
+    range,
+  )}\n\`\`\`\n`;
+}
+
+function renderDocumentLinks(
+  links: DocumentLink[],
+  code: string,
+  fixtureDir: string,
+) {
+  if (!links.length) {
+    return "No document links.\n";
+  }
+
+  let results = "";
+  for (const [index, link] of links.entries()) {
+    results += `${index + 1}. ${link.target ? formatUri(link.target, fixtureDir) : "<missing>"}\n`;
+    results += `\`\`\`marko\n${codeFrame(code, "link", link.range)}\n\`\`\`\n`;
+  }
+
+  return results;
+}
+
+function renderSemanticTokens(
+  tokens: SemanticTokens | null | undefined,
+  doc: TextDocument,
+) {
+  if (!tokens?.data.length) {
+    return "No semantic tokens.\n";
+  }
+
+  let line = 0;
+  let character = 0;
+  let results = "";
+
+  for (let i = 0; i < tokens.data.length; i += 5) {
+    const deltaLine = tokens.data[i]!;
+    const deltaStart = tokens.data[i + 1]!;
+    const length = tokens.data[i + 2]!;
+    const tokenType = SEMANTIC_TOKEN_TYPES[tokens.data[i + 3]!] ?? "unknown";
+    const tokenModifiers = getSemanticTokenModifiers(tokens.data[i + 4]!);
+
+    line += deltaLine;
+    character = deltaLine === 0 ? character + deltaStart : deltaStart;
+
+    const start = Position.create(line, character);
+    const end = Position.create(line, character + length);
+    const text = doc.getText(Range.create(start, end));
+    results += `${i / 5 + 1}. \`${text}\` (${tokenType}${
+      tokenModifiers ? `, ${tokenModifiers}` : ""
+    }) at Ln ${line + 1}, Col ${character + 1}\n`;
+  }
+
+  return results;
+}
+
+function getSemanticTokenModifiers(mask: number) {
+  const modifiers: string[] = [];
+  for (let i = 0; i < SEMANTIC_TOKEN_MODIFIERS.length; i++) {
+    if (mask & (1 << i)) {
+      modifiers.push(SEMANTIC_TOKEN_MODIFIERS[i]!);
+    }
+  }
+
+  return modifiers.join(", ");
+}
+
+function formatUri(uri: string, fixtureDir: string) {
+  const fsPath = URI.parse(uri).fsPath;
+  if (fsPath?.startsWith(fixtureDir)) {
+    return path.relative(fixtureDir, fsPath);
+  }
+
+  return normalizeMessage(uri);
 }
 
 async function openUnsavedDocuments(

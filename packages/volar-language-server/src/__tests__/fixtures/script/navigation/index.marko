@@ -1,0 +1,32 @@
+import FancyButton from "<fancy-button>";
+
+static const testId = "button-id";
+
+<div no-update-body/>
+//          ^?
+
+<div id:no-update="value"/>
+//       ^?
+
+<fancy-button />
+//      ^!  ^?
+
+<FancyButton />
+//       ^?
+
+<fancy-button message="hello" title="hello" onSelect() {}/>
+//                 ^?              ^?            ^!
+
+<fancy-button custom={ temp: true, options: false } />
+//                      ^~
+
+<fancy-button>
+  <@icon name="search"/>
+  //    ^?
+</fancy-button>
+
+<child value=(next) => next />
+//       ^!
+
+<button id=testId>Test</button>
+//          ^~

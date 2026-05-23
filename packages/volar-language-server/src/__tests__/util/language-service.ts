@@ -14,6 +14,29 @@ import { URI } from "vscode-uri";
 
 const rootDir = path.resolve(__dirname, "../fixtures");
 
+export const SEMANTIC_TOKEN_TYPES = [
+  "namespace",
+  "class",
+  "enum",
+  "interface",
+  "typeParameter",
+  "type",
+  "parameter",
+  "variable",
+  "property",
+  "enumMember",
+  "function",
+  "method",
+] as const;
+export const SEMANTIC_TOKEN_MODIFIERS = [
+  "declaration",
+  "readonly",
+  "static",
+  "async",
+  "defaultLibrary",
+  "local",
+] as const;
+
 let serverHandle: LanguageServerHandle | undefined;
 let languageService: TestLanguageService | undefined;
 let componentMetaChecker: ComponentMetaChecker | undefined;
@@ -45,28 +68,8 @@ export async function getLanguageServer() {
           full: true,
           range: true,
         },
-        tokenTypes: [
-          "namespace",
-          "class",
-          "enum",
-          "interface",
-          "typeParameter",
-          "type",
-          "parameter",
-          "variable",
-          "property",
-          "enumMember",
-          "function",
-          "method",
-        ],
-        tokenModifiers: [
-          "declaration",
-          "readonly",
-          "static",
-          "async",
-          "defaultLibrary",
-          "local",
-        ],
+        tokenTypes: [...SEMANTIC_TOKEN_TYPES],
+        tokenModifiers: [...SEMANTIC_TOKEN_MODIFIERS],
         formats: [protocol.TokenFormat.Relative],
       },
     },
