@@ -47,14 +47,24 @@ export function parseScripts(
     const sourceEnd = token.sourceStart + token.length;
     const key = `${token.sourceStart}:${token.length}`;
     const sourceText = parsed.code.slice(token.sourceStart, sourceEnd);
-    const sourceNode = parsed.nodeAt(
+    const sourceNode = getNodeAtTokenStart(parsed, token.sourceStart);
+    const sourceInnerNode = getNodeAtTokenStart(
+      parsed,
       token.sourceStart + Math.min(1, Math.max(0, token.length - 1)),
     );
+    const sourceFeatureNode =
+      sourceInnerNode?.type === NodeType.OpenTagName ||
+      sourceInnerNode?.type === NodeType.AttrName
+        ? sourceInnerNode
+        : sourceNode;
+    const isAttrModifierExpression =
+      sourceFeatureNode?.type === NodeType.AttrName &&
+      isModifierExpressionToken(parsed, sourceFeatureNode, token.sourceStart);
     const isPrimary = firstGeneratedBySource.get(key) === token.generatedStart;
     const shouldUseSourceAttrCompletions =
-      sourceNode?.type === NodeType.AttrName &&
-      sourceNode.parent.parent.type === NodeType.Tag &&
-      isCustomTag(sourceNode.parent.parent.nameText || "", tagLookup);
+      sourceFeatureNode?.type === NodeType.AttrName &&
+      sourceFeatureNode.parent.parent.type === NodeType.Tag &&
+      isCustomTag(sourceFeatureNode.parent.parent.nameText || "", tagLookup);
 
     // Container tokens can cover later, more precise source tokens. If both are
     // semantic, Volar may prefer the wrapper expression over the real source
@@ -71,6 +81,16 @@ export function parseScripts(
       script.tokens.some((other) => {
         return other !== token && other.sourceStart === sourceEnd;
       });
+    const shouldTrimNameBoundary =
+      !isAttrModifierExpression &&
+      (sourceFeatureNode?.type === NodeType.OpenTagName ||
+        sourceFeatureNode?.type === NodeType.AttrName);
+    const shouldUseTypeScriptHover =
+      isAttrModifierExpression ||
+      (sourceFeatureNode?.type !== NodeType.OpenTagName &&
+        sourceFeatureNode?.type !== NodeType.AttrName);
+    const shouldUsePreciseAttrValueNavigation =
+      sourceFeatureNode?.type === NodeType.AttrValue;
 
     // This full-length mapping is always available for diagnostics. Editor
     // features are opt-in below only when the generated token is the best user
@@ -93,9 +113,13 @@ export function parseScripts(
       return [mapping];
     }
 
-    const semanticLength = shouldTrimSemanticBoundary
+    // Volar treats source-map ends as valid hover targets, so trim editor-facing name
+    // mappings to keep whitespace after tag/attr names from resolving to TS.
+    const semanticLength = shouldTrimNameBoundary
       ? token.length - 1
-      : token.length;
+      : shouldTrimSemanticBoundary
+        ? token.length - 1
+        : token.length;
 
     // Boundary mappings that end exactly where a real token starts can make
     // hovers on the real token resolve to adjacent whitespace/wrapper code. Trim
@@ -103,29 +127,62 @@ export function parseScripts(
     const semanticMapping: CodeMapping = {
       sourceOffsets: [token.sourceStart],
       generatedOffsets: [token.generatedStart],
-      lengths: [semanticLength],
+      lengths: [Math.max(0, semanticLength)],
       data: {
-        completion: !shouldUseSourceAttrCompletions,
+        completion: !shouldUseSourceAttrCompletions && !shouldTrimNameBoundary,
         format: false,
-        navigation: true,
-        semantic: true,
+        navigation: !shouldUsePreciseAttrValueNavigation,
+        semantic: shouldUseTypeScriptHover,
         structure: true,
         verification: false,
       },
     };
 
+    const navigationMappings = shouldUsePreciseAttrValueNavigation
+      ? getIdentifierNavigationMappings(sourceText, token, scriptText)
+      : undefined;
+
+    const completionMapping: CodeMapping | undefined =
+      shouldTrimNameBoundary && !shouldUseSourceAttrCompletions
+        ? {
+            sourceOffsets: [token.sourceStart],
+            generatedOffsets: [token.generatedStart],
+            lengths: [token.length],
+            data: {
+              completion: true,
+              format: false,
+              navigation: false,
+              semantic: false,
+              structure: false,
+              verification: false,
+            },
+          }
+        : undefined;
+
     if (semanticLength <= 0) {
-      return [mapping];
+      return [
+        mapping,
+        ...(completionMapping ? [completionMapping] : []),
+        ...(navigationMappings ?? []),
+      ];
     }
 
-    return shouldTrimSemanticBoundary
-      ? [mapping, semanticMapping]
-      : [
-          {
-            ...semanticMapping,
-            data: { ...semanticMapping.data, verification: true },
-          },
-        ];
+    if (shouldTrimSemanticBoundary || shouldTrimNameBoundary) {
+      return [
+        mapping,
+        semanticMapping,
+        ...(completionMapping ? [completionMapping] : []),
+        ...(navigationMappings ?? []),
+      ];
+    }
+
+    return [
+      {
+        ...semanticMapping,
+        data: { ...semanticMapping.data, verification: true },
+      },
+      ...(navigationMappings ?? []),
+    ];
   });
 
   if (mappings.length > 0) {
@@ -145,6 +202,117 @@ export function parseScripts(
   }
 
   return [];
+}
+
+function getIdentifierNavigationMappings(
+  sourceText: string,
+  token: { sourceStart: number; generatedStart: number },
+  scriptText: string,
+): CodeMapping[] {
+  const mappings: CodeMapping[] = [];
+  const identifierReg = /[$A-Z_a-z][$0-9A-Z_a-z]*/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = identifierReg.exec(sourceText))) {
+    const [{ length }] = match;
+    if (isObjectLiteralKey(sourceText, match.index + length)) {
+      continue;
+    }
+
+    const generatedStart = token.generatedStart + match.index;
+    if (
+      scriptText.slice(generatedStart, generatedStart + length) !== match[0]
+    ) {
+      continue;
+    }
+
+    mappings.push({
+      sourceOffsets: [token.sourceStart + match.index],
+      generatedOffsets: [generatedStart],
+      lengths: [length],
+      data: {
+        completion: false,
+        format: false,
+        navigation: true,
+        semantic: false,
+        structure: false,
+        verification: false,
+      },
+    });
+  }
+
+  return mappings;
+}
+
+function isObjectLiteralKey(sourceText: string, end: number) {
+  let offset = end;
+  while (/\s/.test(sourceText[offset] || "")) {
+    offset++;
+  }
+  if (sourceText[offset] !== ":") {
+    return false;
+  }
+
+  offset = end;
+  while (offset > 0 && /\s/.test(sourceText[offset - 1] || "")) {
+    offset--;
+  }
+  while (offset > 0 && isIdentifierPart(sourceText.charCodeAt(offset - 1))) {
+    offset--;
+  }
+  while (offset > 0 && /\s/.test(sourceText[offset - 1] || "")) {
+    offset--;
+  }
+
+  const previous = sourceText[offset - 1];
+  return previous === "{" || previous === ",";
+}
+
+function isIdentifierPart(charCode: number) {
+  return (
+    (charCode >= 65 && charCode <= 90) ||
+    (charCode >= 97 && charCode <= 122) ||
+    (charCode >= 48 && charCode <= 57) ||
+    charCode === 36 ||
+    charCode === 95
+  );
+}
+
+function getNodeAtTokenStart(parsed: ReturnType<typeof parse>, offset: number) {
+  const node = parsed.nodeAt(offset);
+  if (
+    node?.type === NodeType.Tag ||
+    node?.type === NodeType.AttrTag ||
+    node?.type === NodeType.AttrNamed
+  ) {
+    const next = parsed.nodeAt(offset + 1);
+    return isChildNode(next, node) ? next : node;
+  }
+
+  return node;
+}
+
+function isChildNode(
+  node: ReturnType<ReturnType<typeof parse>["nodeAt"]>,
+  parent: ReturnType<ReturnType<typeof parse>["nodeAt"]>,
+) {
+  let current = node?.parent;
+  while (current) {
+    if (current === parent) {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
+function isModifierExpressionToken(
+  parsed: ReturnType<typeof parse>,
+  node: NonNullable<ReturnType<ReturnType<typeof parse>["nodeAt"]>>,
+  offset: number,
+) {
+  const modifierIndex = parsed.read(node).indexOf(":");
+  return modifierIndex !== -1 && offset > node.start + modifierIndex;
 }
 
 function isCustomTag(tagName: string, tagLookup: TaglibLookup) {

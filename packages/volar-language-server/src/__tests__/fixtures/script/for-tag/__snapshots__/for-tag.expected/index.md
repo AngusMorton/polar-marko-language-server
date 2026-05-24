@@ -204,17 +204,6 @@
   85 |
 ```
 
-### Ln 86, Col 16
-```marko
-  84 | </for>
-  85 |
-> 86 | <for until=10 by=(index) => `${index}`>
-     |                ^ (property) by?: ((index: number) => string) | undefined
-  87 | //             ^?
-  88 | </for>
-  89 |
-```
-
 ### Ln 91, Col 5
 ```marko
   89 |

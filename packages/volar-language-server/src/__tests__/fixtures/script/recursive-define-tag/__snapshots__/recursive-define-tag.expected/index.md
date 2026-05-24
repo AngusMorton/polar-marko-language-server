@@ -17,9 +17,7 @@
   10 |         // ^?
   11 |   <for|{ children }| of=children>
 > 12 |     <Section children=children/>
-     |        ^ const Section: {
-    content: ({ children }: Help) => Void;
-}
+     |        ^ Built in [&lt;section&gt;](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/section) HTML tag.
   13 |     // ^?
   14 |   </for>
   15 | </define>
@@ -30,9 +28,7 @@
   16 |
   17 | <for|help| of=input.value>
 > 18 |   <Section ...help/>
-     |      ^ const Section: {
-    content: ({ children }: Help) => Void;
-}
+     |      ^ Built in [&lt;section&gt;](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/section) HTML tag.
   19 |   // ^?
   20 | </for>
   21 |

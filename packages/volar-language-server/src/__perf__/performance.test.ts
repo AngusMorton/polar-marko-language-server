@@ -40,7 +40,7 @@ describe("marko-template performance", () => {
       {
         name: "custom-tag-hover",
         fileName: fixturePath("script", "tags-api-basic", "index.marko"),
-        source: "<fancy-button█ />",
+        source: "<█fancy-button />",
         run: (uri, position) => server.sendHoverRequest(uri, position),
         validate(result) {
           assert(result, "Expected hover result");

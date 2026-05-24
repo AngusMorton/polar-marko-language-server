@@ -1,0 +1,14 @@
+export interface Input {
+  show: boolean;
+}
+
+<div>
+  <h1>Title</h1>
+  <fancy-button>
+    <@icon name="search" />
+  </fancy-button>
+</div>
+
+<if(input.show)>
+  <span>Visible</span>
+</if>

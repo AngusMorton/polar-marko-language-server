@@ -64,6 +64,9 @@ export async function getLanguageServer() {
           snippetSupport: true,
         },
       },
+      definition: {
+        linkSupport: true,
+      },
       semanticTokens: {
         dynamicRegistration: false,
         requests: {

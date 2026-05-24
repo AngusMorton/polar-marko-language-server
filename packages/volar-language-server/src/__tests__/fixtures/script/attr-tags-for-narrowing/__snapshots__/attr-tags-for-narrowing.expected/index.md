@@ -4,13 +4,9 @@
   1 | <list>
   2 |   <for of=[1, 2, 3]>
 > 3 |     <@item size="small"/>
-    |              ^ (property) "size": "small"
+    |              ^ `size?: "large" | "small"`
 
----
-
-`size?: "small" | "large"`
-
-Values: `small`, `large`
+Values: `large`, `small`
   4 |           // ^?
   5 |   </for>
   6 |   <for of=[1, 2, 3]>
@@ -21,13 +17,9 @@ Values: `small`, `large`
    5 |   </for>
    6 |   <for of=[1, 2, 3]>
 >  7 |     <@item size="small"/>
-     |              ^ (property) "size": "small"
+     |              ^ `size?: "large" | "small"`
 
----
-
-`size?: "small" | "large"`
-
-Values: `small`, `large`
+Values: `large`, `small`
    8 |           // ^?
    9 |     <@item size="huge"/>
   10 |           // ^?
@@ -38,13 +30,9 @@ Values: `small`, `large`
    7 |     <@item size="small"/>
    8 |           // ^?
 >  9 |     <@item size="huge"/>
-     |              ^ (property) "size": "huge"
+     |              ^ `size?: "large" | "small"`
 
----
-
-`size?: "small" | "large"`
-
-Values: `small`, `large`
+Values: `large`, `small`
   10 |           // ^?
   11 |   </for>
   12 | </list>

@@ -59,14 +59,7 @@
   28 |   <for|{ href, title }| of=input.tab>
   29 |       // ^?
 > 30 |     <@option value=href>
-     |          ^ (property) "@option": Marko.AttrTag<{
-    value: string;
-    renderBody: Marko.Body;
-}> | undefined
-
----
-
-`@option?` with `value: string` content `() => void` via `input.renderBody`
+     |          ^ `@option?` with `value: string` content `() => void` via `input.renderBody`
   31 |       // ^?
   32 |       ${title}
   33 |     </@option>
@@ -88,14 +81,7 @@
   35 |   <for|{ value, content }| of=input.option>
   36 |       // ^?
 > 37 |     <@option value=value>
-     |          ^ (property) "@option": Marko.AttrTag<{
-    value: string;
-    renderBody: Marko.Body;
-}> | undefined
-
----
-
-`@option?` with `value: string` content `() => void` via `input.renderBody`
+     |          ^ `@option?` with `value: string` content `() => void` via `input.renderBody`
   38 |       // ^?
   39 |       ${content}
   40 |     </@option>

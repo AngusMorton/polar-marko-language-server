@@ -915,7 +915,7 @@ function getEnumValues(
     : [];
 
   if (literalValues.length) {
-    return literalValues;
+    return literalValues.sort((a, b) => a.localeCompare(b));
   }
 
   return fallback?.length ? [...fallback] : undefined;
@@ -962,10 +962,16 @@ function typeToString(
     ) {
       return "boolean";
     }
-    return parts.join(" | ");
+    return parts.every(isLiteralTypeText)
+      ? parts.sort((a, b) => a.localeCompare(b)).join(" | ")
+      : parts.join(" | ");
   }
 
   return safeTypeToString(checker, type, context);
+}
+
+function isLiteralTypeText(value: string) {
+  return /^".*"$/.test(value) || /^-?\d+(?:\.\d+)?$/.test(value);
 }
 
 function safeTypeToString(

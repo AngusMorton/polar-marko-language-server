@@ -77,7 +77,7 @@ export function resolveMarkoTemplateContext(
     sourceUri,
     root,
     offset,
-    position,
+    position: sourceDocument.positionAt(offset),
     node: root.markoAst.nodeAt(offset),
   };
 }

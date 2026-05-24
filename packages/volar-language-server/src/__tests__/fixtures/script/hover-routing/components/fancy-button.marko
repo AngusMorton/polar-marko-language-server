@@ -1,0 +1,16 @@
+export interface Input {
+  /** Custom object docs. */
+  custom?: { value: { something: boolean } };
+  /** Title docs. */
+  title?: string;
+  /** One-character attr docs. */
+  a?: string;
+  first?: number;
+  /** Save callback docs. */
+  onSave?: () => void;
+  /** Icon attr tag docs. */
+  icon?: Marko.AttrTag<{
+    /** Icon name docs. */
+    name?: string;
+  }>;
+}

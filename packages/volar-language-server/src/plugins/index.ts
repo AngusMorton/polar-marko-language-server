@@ -6,6 +6,7 @@ import { create as createMarkoService } from "./marko";
 import { create as createAccessibilityService } from "./marko-accessibility";
 import { create as createMarkoFormatActionService } from "./marko-action-format";
 import { create as createMarkoDebugService } from "./marko-debug";
+import { create as createMarkoDocumentLinksService } from "./marko-document-links";
 import { create as createMarkoTemplateService } from "./marko-template";
 import {
   createMarkoTsServer,
@@ -22,6 +23,7 @@ export function getLanguageServicePlugins(
 ) {
   const result = [
     createMarkoService(ts),
+    createMarkoDocumentLinksService(),
     createMarkoTemplateService(
       ts,
       createMarkoTsServer(sendTsServerRequest, getComponentMetaCacheVersion),

@@ -1,0 +1,39 @@
+export interface Input {
+  destinationCanonical: string;
+  show: boolean;
+}
+
+static const dynamicHref = "./linked.txt";
+static const dynamicSrc = "./linked.txt";
+static const dynamicPoster = "./linked.txt";
+static const dynamicData = "./linked.txt";
+static const dynamicAction = "./linked.txt";
+static const dynamicCite = "./linked.txt";
+static const dynamicFormaction = "./linked.txt";
+static function buildExploreHotelsHref(args: {
+  languageCode: unknown;
+  origin: string;
+  destination: string;
+}) {
+  return args.destination;
+}
+
+<a href=dynamicHref>Dynamic href</a>
+<img src=dynamicSrc alt="Dynamic image">
+<video poster=dynamicPoster></video>
+<object data=dynamicData></object>
+<form action=dynamicAction></form>
+<blockquote cite=dynamicCite></blockquote>
+<button formaction=dynamicFormaction>Submit</button>
+<tracked-link
+  class="border-b border-b-n-10 text-sm font-light hover:border-b-rome2rio-pink"
+  href=buildExploreHotelsHref({
+    languageCode: $global.languageCode,
+    origin: "Hotels-Near",
+    destination: input.destinationCanonical,
+    //                       ^!
+  })
+/>
+
+<tracked-link href=buildExploreHotelsHref({ languageCode: $global.languageCode, origin: "Hotels-Near", destination: input.destinationCanonical }) />
+//                                                                                                                          ^!

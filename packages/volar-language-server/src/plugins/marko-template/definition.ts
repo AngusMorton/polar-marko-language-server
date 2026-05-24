@@ -63,16 +63,13 @@ function provideTypeScriptDefinition(
     return;
   }
 
-  let generatedOffset: number | undefined;
-  for (const [mappedOffset] of embedded.map.toGeneratedLocation(
+  const identifierRange = identifierRangeAtOffset(root, offset);
+  const generatedMatch = getBestGeneratedMatch(
+    embedded,
     offset,
-    (data) => !!data.navigation,
-  )) {
-    generatedOffset = mappedOffset;
-    break;
-  }
-
-  if (generatedOffset === undefined) {
+    identifierRange,
+  );
+  if (!generatedMatch) {
     return;
   }
 
@@ -87,18 +84,40 @@ function provideTypeScriptDefinition(
   }
 
   const fileName = getDocumentFileName(URI.parse(embedded.document.uri));
-  const definitions = languageService.getDefinitionAndBoundSpan(
-    fileName,
-    generatedOffset,
-  )?.definitions;
+  const definitionAndBoundSpan: ts.DefinitionInfoAndBoundSpan | undefined =
+    languageService.getDefinitionAndBoundSpan(fileName, generatedMatch.offset);
+  if (!definitionAndBoundSpan) {
+    return;
+  }
 
+  const definitions = definitionAndBoundSpan.definitions;
   if (!definitions?.length) {
     return;
   }
 
+  const originSelectionRange = generatedMatch.identifierRange
+    ? root.markoAst.locationAt(generatedMatch.identifierRange)
+    : sourceRangeFromTextSpan(
+        definitionAndBoundSpan.textSpan.start,
+        definitionAndBoundSpan.textSpan.length,
+        embedded,
+      );
+
+  return createTypeScriptDefinitionLinks(
+    definitions,
+    context,
+    originSelectionRange,
+  );
+}
+
+function createTypeScriptDefinitionLinks(
+  definitions: readonly ts.DefinitionInfo[],
+  context: LanguageServiceContext,
+  originSelectionRange: LocationLink["originSelectionRange"],
+) {
   return definitions.map((definition: ts.DefinitionInfo) => {
     const targetUri = URI.file(definition.fileName).toString();
-    const range = rangeFromTextSpan(
+    const range = definitionRangeFromTextSpan(
       definition.textSpan.start,
       definition.textSpan.length,
       definition.fileName,
@@ -109,14 +128,157 @@ function provideTypeScriptDefinition(
       targetUri,
       targetRange: range,
       targetSelectionRange: range,
-      originSelectionRange: root.markoAst.locationAt(
-        root.markoAst.nodeAt(offset) ?? {
-          start: offset,
-          end: offset,
-        },
-      ),
+      ...(originSelectionRange ? { originSelectionRange } : undefined),
     } satisfies LocationLink;
   });
+}
+
+function getBestGeneratedMatch(
+  embedded: NonNullable<ReturnType<typeof getScriptCompletionDocument>>,
+  offset: number,
+  identifierRange: { start: number; end: number } | undefined,
+) {
+  let firstMatch: GeneratedMatch | undefined;
+  let bestMatch: GeneratedMatch | undefined;
+
+  for (const [mappedOffset, mapping] of embedded.map.toGeneratedLocation(
+    offset,
+    (data) => !!data.navigation,
+  )) {
+    firstMatch ??= { offset: mappedOffset };
+
+    const sourceStart = mapping.sourceOffsets[0];
+    const generatedStart = mapping.generatedOffsets[0];
+    const length = mapping.lengths[0];
+    if (
+      sourceStart !== undefined &&
+      length !== undefined &&
+      offset >= sourceStart &&
+      offset < sourceStart + length
+    ) {
+      if (
+        identifierRange &&
+        (sourceStart !== identifierRange.start ||
+          length !== identifierRange.end - identifierRange.start)
+      ) {
+        continue;
+      }
+
+      return { offset: mappedOffset, identifierRange };
+    }
+
+    if (
+      sourceStart === undefined ||
+      generatedStart === undefined ||
+      length === undefined
+    ) {
+      continue;
+    }
+
+    const sourceText = embedded.sourceDocument.getText({
+      start: embedded.sourceDocument.positionAt(sourceStart),
+      end: embedded.sourceDocument.positionAt(sourceStart + length),
+    });
+    const generatedText = embedded.document.getText({
+      start: embedded.document.positionAt(generatedStart),
+      end: embedded.document.positionAt(generatedStart + length),
+    });
+
+    if (sourceText === generatedText) {
+      bestMatch = { offset: mappedOffset };
+    }
+  }
+
+  if (!identifierRange) {
+    return bestMatch ?? firstMatch;
+  }
+
+  const generatedIdentifier = embedded.sourceDocument.getText({
+    start: embedded.sourceDocument.positionAt(identifierRange.start),
+    end: embedded.sourceDocument.positionAt(identifierRange.end),
+  });
+  let fallbackMatch: GeneratedMatch | undefined;
+  for (const [
+    sourceStart,
+    sourceEnd,
+    startMapping,
+  ] of embedded.map.toSourceRange(
+    0,
+    embedded.document.getText().length,
+    false,
+    (data) => !!data.navigation,
+  )) {
+    if (sourceEnd - sourceStart !== generatedIdentifier.length) {
+      continue;
+    }
+
+    const sourceText = embedded.sourceDocument.getText({
+      start: embedded.sourceDocument.positionAt(sourceStart),
+      end: embedded.sourceDocument.positionAt(sourceEnd),
+    });
+    if (sourceText !== generatedIdentifier) {
+      continue;
+    }
+
+    const generatedStart = startMapping.generatedOffsets[0];
+    if (generatedStart === undefined) {
+      continue;
+    }
+
+    const match = {
+      offset: generatedStart,
+      identifierRange: { start: sourceStart, end: sourceEnd },
+    };
+    if (sourceStart === identifierRange.start) {
+      return match;
+    }
+
+    fallbackMatch ??= match;
+  }
+
+  return fallbackMatch;
+}
+
+interface GeneratedMatch {
+  offset: number;
+  identifierRange?: { start: number; end: number };
+}
+
+function identifierRangeAtOffset(root: MarkoVirtualCode, offset: number) {
+  const code = root.code;
+  const start = scanIdentifierStart(code, offset);
+  if (start === undefined) {
+    return;
+  }
+
+  let end = start;
+  while (end < code.length && isIdentifierPart(code.charCodeAt(end))) {
+    end++;
+  }
+
+  if (end <= start) {
+    return;
+  }
+
+  return { start, end };
+}
+
+function sourceRangeFromTextSpan(
+  start: number,
+  length: number,
+  embedded: NonNullable<ReturnType<typeof getScriptCompletionDocument>>,
+) {
+  for (const [sourceStart, sourceEnd] of embedded.map.toSourceRange(
+    start,
+    start + length,
+    false,
+    (data) => !!data.navigation,
+  )) {
+    return {
+      start: embedded.sourceDocument.positionAt(sourceStart),
+      end: embedded.sourceDocument.positionAt(sourceEnd),
+    };
+  }
 }
 
 function rangeFromTextSpan(
@@ -138,6 +300,61 @@ function rangeFromTextSpan(
     start: document.positionAt(start),
     end: document.positionAt(start + length),
   };
+}
+
+function definitionRangeFromTextSpan(
+  start: number,
+  length: number,
+  fileName: string,
+  context: LanguageServiceContext,
+) {
+  const script = context.language.scripts.get(URI.file(fileName));
+  if (script?.languageId === "marko") {
+    const document = context.documents.get(
+      script.id,
+      script.languageId,
+      script.snapshot,
+    );
+    const source = document?.getText();
+    const narrowedRange = source
+      ? getNarrowedDeclarationRange(source, start, start + length)
+      : undefined;
+    if (narrowedRange) {
+      return narrowedRange;
+    }
+  }
+
+  return rangeFromTextSpan(start, length, fileName, context);
+}
+
+function scanIdentifierStart(code: string, offset: number) {
+  for (const candidate of [offset, offset - 1]) {
+    if (candidate < 0 || candidate >= code.length) {
+      continue;
+    }
+
+    const charCode = code.charCodeAt(candidate);
+    if (!isIdentifierPart(charCode)) {
+      continue;
+    }
+
+    let start = candidate;
+    while (start > 0 && isIdentifierPart(code.charCodeAt(start - 1))) {
+      start--;
+    }
+
+    return start;
+  }
+}
+
+function isIdentifierPart(charCode: number) {
+  return (
+    (charCode >= 65 && charCode <= 90) ||
+    (charCode >= 97 && charCode <= 122) ||
+    (charCode >= 48 && charCode <= 57) ||
+    charCode === 36 ||
+    charCode === 95
+  );
 }
 
 function provideAttrDefinition(
@@ -225,8 +442,8 @@ function declarationToLocationLink(
   }
 
   const source = fs.readFileSync(declaration.file, "utf-8");
-  const range = getLocation(
-    getLines(source),
+  const range = getDeclarationRange(
+    source,
     declaration.range[0],
     declaration.range[1],
   );
@@ -237,6 +454,64 @@ function declarationToLocationLink(
     targetSelectionRange: range,
     originSelectionRange,
   } satisfies LocationLink;
+}
+
+function getDeclarationRange(source: string, start: number, end: number) {
+  const narrowedRange = getNarrowedDeclarationRange(source, start, end);
+  if (narrowedRange) {
+    return narrowedRange;
+  }
+
+  return getLocation(getLines(source), start, end);
+}
+
+function getNarrowedDeclarationRange(
+  source: string,
+  start: number,
+  end: number,
+) {
+  const declarationSource = source.slice(start, end);
+  const match =
+    /\b(?:interface|type|class|function|const|let|var)\s+([A-Za-z_$][\w$]*)|\b([A-Za-z_$][\w$]*)\??\s*[:(]/.exec(
+      declarationSource,
+    );
+  const keywordOnlyMatch =
+    /^\s*(?:interface|type|class|function|const|let|var)\s*$/.exec(
+      declarationSource,
+    );
+  if (keywordOnlyMatch) {
+    const nameRange = getDeclarationNameAfterKeyword(source, end);
+    if (nameRange) {
+      return nameRange;
+    }
+  }
+
+  const index =
+    match?.[1] !== undefined
+      ? match.index + match[0].lastIndexOf(match[1])
+      : match?.[2] !== undefined
+        ? match.index + match[0].lastIndexOf(match[2])
+        : undefined;
+  const name = match?.[1] ?? match?.[2];
+  if (index === undefined || !name) {
+    return;
+  }
+
+  return getLocation(
+    getLines(source),
+    start + index,
+    start + index + name.length,
+  );
+}
+
+function getDeclarationNameAfterKeyword(source: string, offset: number) {
+  const afterMatch = /^\s*([A-Za-z_$][\w$]*)/.exec(source.slice(offset));
+  if (!afterMatch?.[1]) {
+    return;
+  }
+
+  const index = offset + afterMatch[0].lastIndexOf(afterMatch[1]);
+  return getLocation(getLines(source), index, index + afterMatch[1].length);
 }
 
 function getAttributeInputMeta(

@@ -47,8 +47,7 @@
   10 | <div id:s/>
 ```
 
-1. `class?`
-   newText: `class`
+1. `class`
 
 ### Ln 10, Col 10
 ```marko

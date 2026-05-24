@@ -47,13 +47,7 @@
   19 |
   20 | <foo value=1 as const>
 > 21 |   <@then|foo|>
-     |       ^ (property) "@then": Marko.AttrTag<{
-    content: Marko.Body<[unknown], void>;
-}> | undefined
-
----
-
-`@then?` content `(arg0: T) => void` via `input.content`
+     |       ^ `@then?` content `(arg0: T) => void` via `input.content`
   22 |     //^?
   23 |     ${foo}
   24 |   </@then>

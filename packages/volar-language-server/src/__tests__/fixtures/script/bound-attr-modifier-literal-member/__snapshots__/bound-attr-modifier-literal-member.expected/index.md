@@ -1,15 +1,4 @@
 ## Hovers
-### Ln 3, Col 9
-```marko
-  1 | <let/a = { b: 1, bChange(_value: number) {} }/>
-  2 |
-> 3 | <child value:parseInt:=a.b/>
-    |         ^ (property) Input.value: string | number
-  4 | //      ^?    ^?
-  5 |
-  6 | <child value:Boolean:=a.b/>
-```
-
 ### Ln 3, Col 15
 ```marko
   1 | <let/a = { b: 1, bChange(_value: number) {} }/>
@@ -28,16 +17,6 @@ All other strings are considered decimal.
   4 | //      ^?    ^?
   5 |
   6 | <child value:Boolean:=a.b/>
-```
-
-### Ln 6, Col 9
-```marko
-  4 | //      ^?    ^?
-  5 |
-> 6 | <child value:Boolean:=a.b/>
-    |         ^ (property) Input.value: string | number
-  7 | //      ^?    ^?
-  8 |
 ```
 
 ### Ln 6, Col 15

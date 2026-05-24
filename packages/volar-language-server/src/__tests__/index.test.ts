@@ -6,11 +6,13 @@ import {
   type CompletionItem,
   CompletionItemKind,
   type DocumentLink,
+  type DocumentSymbol,
   type Location,
   type LocationLink,
   Position,
   Range,
   type SemanticTokens,
+  SymbolKind,
 } from "vscode-languageserver";
 // import { bench, run } from "mitata";
 import { TextDocument } from "vscode-languageserver-textdocument";
@@ -50,7 +52,9 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
         fixtureDir,
       );
       const shouldSnapshotGeneratedOutput =
-        subdir !== "document-links" && subdir !== "semantic-tokens";
+        subdir !== "document-links" &&
+        subdir !== "document-symbols" &&
+        subdir !== "semantic-tokens";
 
       try {
         for (const filename of loadMarkoFiles(fixtureDir)) {
@@ -133,7 +137,12 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
             definitionResults += `### Ln ${position.line + 1}, Col ${
               position.character + 1
             }\n\`\`\`marko\n${codeFrame(code, "definition", loc)}\n\`\`\`\n\n`;
-            definitionResults += renderDefinitions(definitions, fixtureDir);
+            definitionResults += renderDefinitions(
+              definitions,
+              fixtureDir,
+              code,
+              subdir === "document-links",
+            );
           }
 
           if (definitionResults.length) {
@@ -214,6 +223,13 @@ for (const subdir of fs.readdirSync(FIXTURE_DIR)) {
           if (subdir === "document-links") {
             const links = await serverHandle.sendDocumentLinkRequest(doc.uri);
             results += `## Document Links\n${renderDocumentLinks(links ?? [], code, fixtureDir)}\n`;
+          }
+
+          if (subdir === "document-symbols") {
+            const symbols = await serverHandle.sendDocumentSymbolRequest(
+              doc.uri,
+            );
+            results += `## Document Symbols\n${renderDocumentSymbols(symbols ?? [], code)}\n`;
           }
 
           if (subdir === "semantic-tokens") {
@@ -401,6 +417,8 @@ function toDefinitionList(
 function renderDefinitions(
   definitions: Array<Location | LocationLink>,
   fixtureDir: string,
+  code: string,
+  includeOrigin: boolean,
 ) {
   if (!definitions.length) {
     return "No definitions.\n\n";
@@ -412,9 +430,21 @@ function renderDefinitions(
   for (const [index, definition] of definitions.entries()) {
     const uri = getDefinitionUri(definition);
     const range = getDefinitionRange(definition);
+    const originRange = getDefinitionOriginRange(definition);
+    const hasOrigin = "originSelectionRange" in definition;
     results += `${index + 1}. ${formatUri(uri, fixtureDir)}:${
       range.start.line + 1
     }:${range.start.character + 1}\n`;
+    if (includeOrigin) {
+      results += `originSelectionRange: ${hasOrigin ? "present" : "absent"}\n`;
+    }
+    if (includeOrigin && originRange) {
+      results += `origin:\n\`\`\`marko\n${codeFrame(
+        code,
+        "origin",
+        originRange,
+      )}\n\`\`\`\n`;
+    }
     results += renderTargetFrame(uri, range);
   }
 
@@ -441,6 +471,12 @@ function getDefinitionRange(definition: Location | LocationLink) {
   return "targetSelectionRange" in definition
     ? definition.targetSelectionRange
     : definition.range;
+}
+
+function getDefinitionOriginRange(definition: Location | LocationLink) {
+  return "originSelectionRange" in definition
+    ? definition.originSelectionRange
+    : undefined;
 }
 
 function renderTargetFrame(uri: string, range: Range) {
@@ -471,6 +507,29 @@ function renderDocumentLinks(
     results += `${index + 1}. ${link.target ? formatUri(link.target, fixtureDir) : "<missing>"}\n`;
     results += `\`\`\`marko\n${codeFrame(code, "link", link.range)}\n\`\`\`\n`;
   }
+
+  return results;
+}
+
+function renderDocumentSymbols(symbols: DocumentSymbol[], code: string) {
+  if (!symbols.length) {
+    return "No document symbols.\n";
+  }
+
+  let results = "";
+  const visit = (symbol: DocumentSymbol, depth: number, indexPath: string) => {
+    const kind = symbol.kind && SymbolKind[symbol.kind];
+    results += `${"  ".repeat(depth)}${indexPath}. \`${symbol.name}\`${kind ? ` (${kind})` : ""}\n`;
+    results += `\`\`\`marko\n${codeFrame(code, "symbol", symbol.selectionRange)}\n\`\`\`\n`;
+
+    symbol.children?.forEach((child, index) => {
+      visit(child, depth + 1, `${indexPath}.${index + 1}`);
+    });
+  };
+
+  symbols.forEach((symbol, index) => {
+    visit(symbol, 0, String(index + 1));
+  });
 
   return results;
 }
@@ -520,9 +579,11 @@ function getSemanticTokenModifiers(mask: number) {
 }
 
 function formatUri(uri: string, fixtureDir: string) {
-  const fsPath = URI.parse(uri).fsPath;
+  const parsed = URI.parse(uri);
+  const fsPath = parsed.fsPath;
+  const suffix = `${parsed.query ? `?${parsed.query}` : ""}${parsed.fragment ? `#${parsed.fragment}` : ""}`;
   if (fsPath?.startsWith(fixtureDir)) {
-    return path.relative(fixtureDir, fsPath);
+    return `${path.relative(fixtureDir, fsPath)}${suffix}`;
   }
 
   return normalizeMessage(uri);

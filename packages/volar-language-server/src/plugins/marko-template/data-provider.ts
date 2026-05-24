@@ -108,6 +108,26 @@ function getTagData(
     });
   }
 
+  for (const tagName of getImportedTagNames(root.code)) {
+    if (tags.some((tag) => tag.name === tagName)) {
+      continue;
+    }
+
+    const tagMeta = componentMeta?.getTagMetaForTag(tagName);
+    if (!tagMeta) {
+      continue;
+    }
+
+    tags.push({
+      name: tagName,
+      description: {
+        kind: "markdown",
+        value: formatTagMetaDocumentation(tagMeta),
+      },
+      attributes: [],
+    });
+  }
+
   if (componentMetaKey) {
     let cacheForRoot = enrichedTagDataCache.get(root);
     if (!cacheForRoot) {
@@ -159,13 +179,13 @@ function getAttributeData(
     const inputMeta = tagMeta?.input?.props.find(
       (input) => input.name === attr.name,
     );
-    const documentation = getAttributeDocumentation(
-      attr.description,
-      inputMeta,
-    );
     const autocomplete = Array.isArray(attr.autocomplete)
       ? attr.autocomplete[0]
       : attr.autocomplete;
+    const documentation = getAttributeDocumentation(
+      getAttributeDescription(attr.description, autocomplete?.description),
+      inputMeta,
+    );
     let name = attr.name;
     const values: IValueData[] = [];
 
@@ -188,19 +208,32 @@ function getAttributeData(
     });
   });
 
-  for (const input of tagMeta?.input?.props ?? []) {
-    if (seenNames.has(input.name) || nestedTagAttrs.has(input.name)) {
-      continue;
-    }
+  if (tagMeta?.input) {
+    for (const input of tagMeta.input.props) {
+      if (nestedTagAttrs.has(input.name)) {
+        continue;
+      }
 
-    attributes.push({
-      name: input.required ? input.name : `${input.name}?`,
-      description: {
-        kind: "markdown",
-        value: formatInputMetaDocumentation(input),
-      },
-      values: input.enumValues?.map((value) => ({ name: value })),
-    });
+      const existingIndex = attributes.findIndex(
+        (attr) => attr.name === input.name,
+      );
+      const inputData = {
+        name: input.name,
+        description: {
+          kind: "markdown",
+          value: formatInputMetaDocumentation(input),
+        },
+        values: input.enumValues?.map((value) => ({ name: value })),
+      } satisfies IAttributeData;
+
+      if (existingIndex === -1) {
+        attributes.push(inputData);
+      } else {
+        attributes[existingIndex] = inputData;
+      }
+
+      seenNames.add(input.name);
+    }
   }
 
   for (const event of tagMeta?.input?.events ?? []) {
@@ -209,7 +242,7 @@ function getAttributeData(
     }
 
     attributes.push({
-      name: event.required ? event.name : `${event.name}?`,
+      name: event.name,
       description: {
         kind: "markdown",
         value: `\`${event.name}: ${event.signature || event.type}\`${
@@ -220,6 +253,16 @@ function getAttributeData(
   }
 
   return attributes;
+}
+
+function getImportedTagNames(source: string) {
+  const tagNames: string[] = [];
+  const importReg = /\bimport\s+([A-Za-z_$][\w$]*)\s+from\s+["'][^"']+["']/g;
+  let match: RegExpExecArray | null;
+  while ((match = importReg.exec(source))) {
+    tagNames.push(match[1]!);
+  }
+  return tagNames;
 }
 
 function getValueData(
@@ -341,6 +384,19 @@ function getAttributeDocumentation(
     kind: "markdown",
     value,
   };
+}
+
+function getAttributeDescription(
+  description: string | undefined,
+  autocompleteDescription: string | undefined,
+) {
+  if (!description) {
+    return autocompleteDescription;
+  }
+
+  return autocompleteDescription
+    ? `${description}\n\n${autocompleteDescription}`
+    : description;
 }
 
 function appendMoreInfo(

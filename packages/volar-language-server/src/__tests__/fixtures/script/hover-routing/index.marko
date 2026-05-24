@@ -1,0 +1,32 @@
+import FancyButton from "./components/fancy-button.marko";
+
+static const value = { something: true };
+
+<FancyButton custom={ value } title="hello" />
+//    ^?    ^?    ^?     ^~  ^?
+
+<FancyButton custom={ value: { something: true } } title="hello" />
+//                               ^~
+
+<FancyButton first=1   title="hello" />
+//                    ^?
+
+<FancyButton a="one" />
+//           ^?^?
+
+<FancyButton title:scoped="primary" />
+//                 ^?
+
+<FancyButton onSave() {} />
+//           ^?
+
+<FancyButton>
+  <@icon name="search" />
+  //    ^?  ^?
+</FancyButton>
+
+<FancyButton />
+//          ^~
+
+<input />
+//    ^~

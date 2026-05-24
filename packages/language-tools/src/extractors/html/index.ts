@@ -72,7 +72,8 @@ class HTMLExtractor {
     const isDynamic = !node.nameText || !isHTMLTag(node.nameText);
     let hasDynamicAttrs = false,
       hasDynamicBody = false;
-    if (isDynamic) {
+
+    if (!node.nameText) {
       this.#writeCustomTag(node);
     } else {
       ({ hasDynamicAttrs, hasDynamicBody } = this.#writeHTMLTag(node, id));

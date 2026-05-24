@@ -9,7 +9,7 @@
 ```
 
 1. `span`
-   documentation: The span element doesn't mean anything on its own, but can be useful when used together with the global attributes, e.g. class, lang, or dir. It represents its children. _Widely available across major browsers (Baseline since 2015)_ [MDN...
+   documentation: Built in [&lt;span&gt;](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/span) HTML tag.
 
 ### Ln 4, Col 6
 ```marko

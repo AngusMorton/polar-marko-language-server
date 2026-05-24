@@ -8,11 +8,9 @@ import {
   formatAttrTagMetaDocumentation,
   formatEventMetaDocumentation,
   formatInputMetaDocumentation,
-  formatTagMetaDocumentation,
 } from "./documentation";
+import { getHoverNameEnd, getHoverNameNodeAtOffset } from "./hover-target";
 import type { MarkoTemplateContext } from "./util";
-import getTagNameCompletion from "./util/get-tag-name-completion";
-import { isHTML } from "./util/is-html";
 
 export function provideHover(
   templateContext: MarkoTemplateContext,
@@ -20,65 +18,11 @@ export function provideHover(
   componentMeta?: MarkoComponentMetaSession,
 ): Hover | undefined {
   if (htmlHover) {
-    return mergeHtmlAndSourceHover(
-      htmlHover,
-      provideSourceHover(templateContext, componentMeta),
-    );
-  }
-
-  if (isModifierHoverContext(templateContext)) {
-    return provideSourceHover(templateContext, componentMeta);
+    const range = getHoverRange(templateContext);
+    return range ? { ...htmlHover, range } : htmlHover;
   }
 
   return provideSourceHover(templateContext, componentMeta);
-}
-
-function mergeHtmlAndSourceHover(
-  htmlHover: Hover,
-  sourceHover: Hover | undefined,
-) {
-  if (!sourceHover) {
-    return htmlHover;
-  }
-
-  const htmlText = getHoverText(htmlHover);
-  const sourceText = getHoverText(sourceHover);
-  if (
-    !sourceText ||
-    htmlText.includes(sourceText) ||
-    (hasComponentMetadata(sourceText) && hasComponentMetadata(htmlText))
-  ) {
-    return htmlHover;
-  }
-
-  const contents = {
-    kind: MarkupKind.Markdown,
-    value: htmlText ? `${htmlText}\n\n---\n\n${sourceText}` : sourceText,
-  };
-
-  return {
-    ...htmlHover,
-    contents,
-  } satisfies Hover;
-}
-
-function hasComponentMetadata(value: string) {
-  return /(?:^|\n)(?:Input Props|Input Events|Attr Tags|Content|Result|Input):/.test(
-    value,
-  );
-}
-
-function getHoverText(hover: Hover) {
-  const { contents } = hover;
-  if (typeof contents === "string") {
-    return contents;
-  }
-  if (Array.isArray(contents)) {
-    return contents
-      .map((entry) => (typeof entry === "string" ? entry : entry.value))
-      .join("\n");
-  }
-  return contents.value;
 }
 
 function provideSourceHover(
@@ -86,7 +30,7 @@ function provideSourceHover(
   componentMeta?: MarkoComponentMetaSession,
 ): Hover | undefined {
   const { node, root, offset } = templateContext;
-  const targetNode = getNameNodeAtOffset(root, offset, node);
+  const targetNode = getHoverNameNodeAtOffset(root, offset, node);
 
   if (
     targetNode?.type !== NodeType.OpenTagName &&
@@ -97,7 +41,7 @@ function provideSourceHover(
 
   switch (targetNode.type) {
     case NodeType.OpenTagName:
-      return provideTagHover(
+      return provideAttrTagHover(
         targetNode as Node.OpenTagName,
         root,
         componentMeta,
@@ -114,72 +58,31 @@ function provideSourceHover(
   }
 }
 
-function provideTagHover(
+function provideAttrTagHover(
   node: Node.OpenTagName,
   root: MarkoVirtualCode,
   componentMeta?: MarkoComponentMetaSession,
 ): Hover | undefined {
   const tag = node.parent;
-  if (tag.type === NodeType.AttrTag && tag.owner?.nameText) {
-    const attrTagMeta = componentMeta?.getAttrTagMetaForTag(
-      tag.owner.nameText,
-      tag.nameText,
-    );
-    const value = attrTagMeta
-      ? formatAttrTagMetaDocumentation(attrTagMeta)
-      : "";
-    if (value) {
-      return {
-        range: root.markoAst.locationAt(node),
-        contents: {
-          kind: MarkupKind.Markdown,
-          value,
-        },
-      };
-    }
-
+  if (tag.type !== NodeType.AttrTag || !tag.owner?.nameText) {
     return;
   }
 
-  const tagName = tag.nameText || "";
-  const tagDef = tagName && root.tagLookup.getTag(tagName);
-  const tagMeta = tagName && componentMeta?.getTagMetaForTag(tagName);
-
-  if (tagMeta && (!tagDef || !isNativeHtmlTag(root, tagName))) {
-    const value = formatTagMetaDocumentation(tagMeta);
-    if (!value) {
-      return;
-    }
-
-    return {
-      range: root.markoAst.locationAt(node),
-      contents: {
-        kind: MarkupKind.Markdown,
-        value,
-      },
-    };
-  }
-
-  if (!tagDef) {
-    return;
-  }
-
-  if (!tagName || !isNativeHtmlTag(root, tagName)) {
-    return;
-  }
-
-  const completion = getTagNameCompletion({
-    tag: tagDef,
-    importer: root.fileName,
-  });
-
-  if (!completion.documentation) {
+  const attrTagMeta = componentMeta?.getAttrTagMetaForTag(
+    tag.owner.nameText,
+    tag.nameText,
+  );
+  const value = attrTagMeta ? formatAttrTagMetaDocumentation(attrTagMeta) : "";
+  if (!value) {
     return;
   }
 
   return {
     range: root.markoAst.locationAt(node),
-    contents: completion.documentation,
+    contents: {
+      kind: MarkupKind.Markdown,
+      value,
+    },
   };
 }
 
@@ -216,50 +119,109 @@ function provideAttrHover(
     return;
   }
 
-  const attrDef = root.tagLookup.getAttribute(tagName, attrName);
-  const inputMeta = getAttributeInputMeta(
-    node,
-    tagName,
-    attrName,
-    componentMeta,
-  );
-  const eventMeta = componentMeta?.getEventMetaForTag(tagName, attrName);
-  if (eventMeta) {
-    const value = formatEventMetaDocumentation(eventMeta);
-    if (value) {
-      return {
-        range: root.markoAst.locationAt(node),
-        contents: {
-          kind: MarkupKind.Markdown,
-          value,
-        },
-      };
-    }
+  const parentTag = node.parent.parent;
+  if (parentTag.type === NodeType.AttrTag) {
+    return provideAttrTagInputHover(node, root, attrName, componentMeta);
   }
 
-  if (!attrDef && !inputMeta) {
+  if (node.parent.value?.type !== NodeType.AttrMethod) {
     return;
   }
 
+  return provideMethodAttrHover(node, root, tagName, attrName, componentMeta);
+}
+
+function provideAttrTagInputHover(
+  node: Node.AttrName,
+  root: MarkoVirtualCode,
+  attrName: string,
+  componentMeta?: MarkoComponentMetaSession,
+): Hover | undefined {
+  const tag = node.parent.parent;
+  if (tag.type !== NodeType.AttrTag || !tag.owner?.nameText) {
+    return;
+  }
+
+  const inputMeta = componentMeta?.getAttrTagInputMetaForTag(
+    tag.owner.nameText,
+    tag.nameText,
+    attrName,
+  );
+  if (inputMeta) {
+    return createMarkdownHover(
+      root,
+      node,
+      formatInputMetaDocumentation(inputMeta),
+    );
+  }
+
+  return provideTaglibAttrHover(node, root, tag.nameText, attrName);
+}
+
+function provideMethodAttrHover(
+  node: Node.AttrName,
+  root: MarkoVirtualCode,
+  tagName: string,
+  attrName: string,
+  componentMeta?: MarkoComponentMetaSession,
+): Hover | undefined {
+  const inputMeta = componentMeta?.getInputMetaForTag(tagName, attrName);
+  if (inputMeta) {
+    return createMarkdownHover(
+      root,
+      node,
+      formatInputMetaDocumentation(inputMeta),
+    );
+  }
+
+  const eventMeta = componentMeta?.getEventMetaForTag(tagName, attrName);
+  if (eventMeta) {
+    return createMarkdownHover(
+      root,
+      node,
+      formatEventMetaDocumentation(eventMeta),
+    );
+  }
+
+  return provideTaglibAttrHover(node, root, tagName, attrName);
+}
+
+function provideTaglibAttrHover(
+  node: Node.AttrName,
+  root: MarkoVirtualCode,
+  tagName: string,
+  attrName: string,
+) {
+  const attrDef = root.tagLookup.getAttribute(tagName, attrName);
   const autocomplete = Array.isArray(attrDef?.autocomplete)
     ? attrDef.autocomplete[0]
     : attrDef?.autocomplete;
-  let value = inputMeta
-    ? formatInputMetaDocumentation(inputMeta)
-    : attrDef?.description || "";
+  let value = attrDef?.description || "";
 
-  if (!inputMeta && autocomplete?.description) {
+  if (autocomplete?.description) {
     value += value
       ? `\n\n${autocomplete.description}`
       : autocomplete.description;
   }
 
-  if (!inputMeta && autocomplete?.descriptionMoreURL) {
+  if (autocomplete?.descriptionMoreURL) {
     value += value
       ? `\n\n[More Info](${autocomplete.descriptionMoreURL})`
       : `[More Info](${autocomplete.descriptionMoreURL})`;
   }
 
+  if (!value) {
+    return;
+  }
+
+  return createMarkdownHover(root, node, value);
+}
+
+function createMarkdownHover(
+  root: MarkoVirtualCode,
+  node: Node.AttrName,
+  value: string,
+): Hover | undefined {
   if (!value) {
     return;
   }
@@ -273,26 +235,6 @@ function provideAttrHover(
   };
 }
 
-function getAttributeInputMeta(
-  node: Node.AttrName,
-  tagName: string,
-  attrName: string,
-  componentMeta: MarkoComponentMetaSession | undefined,
-) {
-  const parentTag = node.parent.parent;
-  if (parentTag.type === NodeType.AttrTag) {
-    return parentTag.owner?.nameText
-      ? componentMeta?.getAttrTagInputMetaForTag(
-          parentTag.owner.nameText,
-          parentTag.nameText,
-          attrName,
-        )
-      : undefined;
-  }
-
-  return componentMeta?.getInputMetaForTag(tagName, attrName);
-}
-
 function getModifierDocumentation(modifier: string) {
   switch (modifier) {
     case "scoped":
@@ -304,60 +246,18 @@ function getModifierDocumentation(modifier: string) {
   }
 }
 
-function isModifierHoverContext(templateContext: MarkoTemplateContext) {
-  const attrNode = getAttrNameNodeAtOffset(
+function getHoverRange(templateContext: MarkoTemplateContext) {
+  const targetNode = getHoverNameNodeAtOffset(
     templateContext.root,
     templateContext.offset,
+    templateContext.node,
   );
-  if (!attrNode) {
-    return false;
-  }
-
-  const rawName = templateContext.root.markoAst.read(attrNode);
-  const modifierIndex = rawName.indexOf(":");
   return (
-    modifierIndex !== -1 &&
-    templateContext.offset > attrNode.start + modifierIndex
-  );
-}
-
-function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
-  const current = root.markoAst.nodeAt(offset);
-  if (current?.type === NodeType.AttrName) {
-    return current;
-  }
-
-  if (current) {
-    return;
-  }
-
-  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
-  if (previous?.type === NodeType.AttrName) {
-    return previous;
-  }
-}
-
-function getNameNodeAtOffset(
-  root: MarkoVirtualCode,
-  offset: number,
-  node?: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
-) {
-  if (node?.type === NodeType.AttrName || node?.type === NodeType.OpenTagName) {
-    return node;
-  }
-
-  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
-  if (
-    (previous?.type === NodeType.AttrName ||
-      previous?.type === NodeType.OpenTagName) &&
-    previous.end === offset
-  ) {
-    return previous;
-  }
-}
-
-function isNativeHtmlTag(root: MarkoVirtualCode, tagName: string) {
-  return (
-    tagName === tagName.toLowerCase() && isHTML(root.tagLookup.getTag(tagName))
+    targetNode && {
+      start: templateContext.document.positionAt(targetNode.start),
+      end: templateContext.document.positionAt(
+        getHoverNameEnd(templateContext.root, targetNode),
+      ),
+    }
   );
 }

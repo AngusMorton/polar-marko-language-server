@@ -105,10 +105,20 @@ export function isSourceOnlyCompletionContext(
     case NodeType.OpenTagName:
       return node.parent.type === NodeType.AttrTag;
     case NodeType.AttrValue:
-      return node.bound;
+      return !isStaticQuotedAttrValue(root, node);
     default:
       return false;
   }
+}
+
+function isStaticQuotedAttrValue(
+  root: MarkoTemplateContext["root"],
+  node: Extract<
+    NonNullable<MarkoTemplateContext["node"]>,
+    { type: NodeType.AttrValue }
+  >,
+) {
+  return !node.bound && /^['"]$/.test(root.code[node.value.start] || "");
 }
 
 function shouldUseSourceAttrCompletions(

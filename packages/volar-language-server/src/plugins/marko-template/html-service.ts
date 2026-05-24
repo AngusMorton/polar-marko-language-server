@@ -8,6 +8,7 @@ import {
   resolveReference,
 } from "volar-service-html";
 import type * as html from "vscode-html-languageservice";
+import { getDefaultHTMLDataProvider } from "vscode-html-languageservice";
 import { URI } from "vscode-uri";
 
 import type {
@@ -23,7 +24,7 @@ import { createMarkoDataProvider } from "./data-provider";
 export function createMarkoHtmlService(
   componentMetaManager?: MarkoComponentMetaManager,
 ) {
-  let htmlData: html.IHTMLDataProvider[] = [];
+  let htmlData: html.IHTMLDataProvider[] = [getDefaultHTMLDataProvider()];
   let currentRoot: MarkoVirtualCode | undefined;
   let currentContext: LanguageServiceContext | undefined;
   let currentComponentMeta: object | undefined;
@@ -32,7 +33,7 @@ export function createMarkoHtmlService(
 
   const baseService = createHtmlService({
     documentSelector: ["marko"],
-    useDefaultDataProvider: true,
+    useDefaultDataProvider: false,
     getDocumentContext(context) {
       return {
         resolveReference(ref, base) {
@@ -102,6 +103,7 @@ export function createMarkoHtmlService(
           context,
           componentMeta,
         ),
+        getDefaultHTMLDataProvider(),
       ];
       listeners.forEach((listener) => listener());
     },

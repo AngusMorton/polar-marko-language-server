@@ -8,17 +8,6 @@
   4 | <child value:parseInt:=b/>
 ```
 
-### Ln 4, Col 9
-```marko
-  2 | //   ^?  ^?
-  3 |
-> 4 | <child value:parseInt:=b/>
-    |         ^ (property) Input.value: string | number
-  5 | //      ^?    ^?       ^?
-  6 |
-  7 | <child value:Boolean:=b/>
-```
-
 ### Ln 4, Col 15
 ```marko
   2 | //   ^?  ^?
@@ -48,16 +37,6 @@ All other strings are considered decimal.
   5 | //      ^?    ^?       ^?
   6 |
   7 | <child value:Boolean:=b/>
-```
-
-### Ln 7, Col 9
-```marko
-  5 | //      ^?    ^?       ^?
-  6 |
-> 7 | <child value:Boolean:=b/>
-    |         ^ (property) Input.value: string | number
-  8 | //      ^?    ^?      ^?
-  9 |
 ```
 
 ### Ln 7, Col 15
