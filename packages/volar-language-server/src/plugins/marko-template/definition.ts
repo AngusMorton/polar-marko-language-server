@@ -27,27 +27,32 @@ export function provideDefinition(
   componentMeta?: MarkoComponentMetaSession,
 ): LocationLink[] | undefined {
   const tsDefinitions = provideTypeScriptDefinition(context, root, offset);
-  if (!node) {
+  const templateDefinitions = provideTemplateDefinition(
+    node,
+    root,
+    componentMeta,
+  );
+
+  if (!templateDefinitions?.length) {
     return tsDefinitions;
   }
 
-  let templateDefinitions: LocationLink[] | undefined;
-  switch (node.type) {
+  return tsDefinitions?.length
+    ? [...templateDefinitions, ...tsDefinitions]
+    : templateDefinitions;
+}
+
+function provideTemplateDefinition(
+  node: ReturnType<MarkoVirtualCode["markoAst"]["nodeAt"]>,
+  root: MarkoVirtualCode,
+  componentMeta?: MarkoComponentMetaSession,
+) {
+  switch (node?.type) {
     case NodeType.AttrName:
-      templateDefinitions = provideAttrDefinition(node, root, componentMeta);
-      break;
+      return provideAttrDefinition(node, root, componentMeta);
     case NodeType.OpenTagName:
-      templateDefinitions = provideTagDefinition(node, root, componentMeta);
-      break;
+      return provideTagDefinition(node, root, componentMeta);
   }
-
-  if (templateDefinitions?.length) {
-    return tsDefinitions?.length
-      ? [...templateDefinitions, ...tsDefinitions]
-      : templateDefinitions;
-  }
-
-  return tsDefinitions;
 }
 
 function provideTypeScriptDefinition(

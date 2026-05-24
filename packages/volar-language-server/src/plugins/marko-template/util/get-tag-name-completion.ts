@@ -11,7 +11,7 @@ import {
 } from "vscode-languageserver";
 import { URI } from "vscode-uri";
 
-import { isHTML } from "./is-html";
+import { isHTML } from "../../shared/is-html";
 
 const deprecated = [CompletionItemTag.Deprecated] as CompletionItemTag[];
 

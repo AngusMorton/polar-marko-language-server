@@ -83,49 +83,6 @@ export function resolveMarkoTemplateContext(
   };
 }
 
-export async function provideHtmlCompletionItems(
-  htmlService: {
-    provideCompletionItems?(
-      document: TextDocument,
-      position: Position,
-      completionContext: CompletionContext,
-    ): Promise<CompletionList | undefined> | CompletionList | undefined;
-  },
-  templateContext: MarkoTemplateContext,
-  completionContext: CompletionContext,
-) {
-  const list = await htmlService.provideCompletionItems?.(
-    templateContext.document,
-    templateContext.position,
-    completionContext,
-  );
-  if (!list?.items.length) {
-    return;
-  }
-
-  for (const item of list.items) {
-    const documentation =
-      typeof item.documentation === "string"
-        ? item.documentation
-        : item.documentation?.value;
-
-    if (
-      documentation?.includes("Custom Marko tag discovered") ||
-      documentation?.includes("Core Marko")
-    ) {
-      item.kind = CompletionItemKind.Class;
-      item.sortText = `0${getCompletionInsertText(item)}`;
-    }
-
-    item.data = {
-      source: MARKO_TEMPLATE_SOURCE,
-      kind: MarkoCompletionKind.Html,
-    } satisfies MarkoCompletionData;
-  }
-
-  return list;
-}
-
 export function isAttrNameCompletionContext(
   templateContext: MarkoTemplateContext,
 ) {

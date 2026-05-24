@@ -2,6 +2,7 @@ import type { MarkoVirtualCode } from "@marko/language-core";
 import { NodeType } from "@marko/language-tools";
 import type {
   CompletionItem,
+  CompletionList,
   Hover,
   LanguageServiceContext,
   LanguageServicePlugin,
@@ -9,22 +10,31 @@ import type {
   LocationLink,
 } from "@volar/language-service";
 import { transformCompletionItem } from "@volar/language-service";
+import {
+  create as createHtmlService,
+  resolveReference,
+} from "volar-service-html";
 import { getFormatCodeSettings } from "volar-service-typescript/lib/configs/getFormatCodeSettings";
 import { getUserPreferences } from "volar-service-typescript/lib/configs/getUserPreferences";
 import { applyCompletionEntryDetails } from "volar-service-typescript/lib/utils/lspConverters";
+import type * as html from "vscode-html-languageservice";
+import { getDefaultHTMLDataProvider } from "vscode-html-languageservice";
 import { URI } from "vscode-uri";
 
+import { isHTML } from "../shared/is-html";
 import { getSourceRange } from "../shared/marko-documents";
 import {
   MARKO_SCRIPT_EMBEDDED_CODE_ID,
+  MARKO_TEMPLATE_SOURCE,
+  type MarkoCompletionData,
   MarkoCompletionKind,
 } from "./completion-types";
+import type { MarkoComponentMetaSession } from "./component-meta";
 import { createComponentMetaManager } from "./component-meta";
+import { createMarkoDataProvider } from "./data-provider";
 import { provideDefinition } from "./definition";
-import { provideDocumentSymbols as provideMarkoDocumentSymbols } from "./document-symbols";
 import { provideHover } from "./hover";
 import { getHoverNameNodeAtOffset } from "./hover-target";
-import { createMarkoHtmlService } from "./html-service";
 import {
   isSourceOnlyCompletionContext,
   provideSourceOnlyCompletions,
@@ -40,20 +50,63 @@ import {
   mergeCompletionLists,
   normalizeAttrCompletionKind,
   normalizeAttrValueCompletionKind,
-  provideHtmlCompletionItems,
   provideScriptTagSymbolCompletions,
   resolveMarkoTemplateContext,
   transformSourceCompletionList,
 } from "./util";
-import { isHTML } from "./util/is-html";
 
 export const create = (
   ts: typeof import("typescript"),
   tsserver: MarkoTsServer,
 ): LanguageServicePlugin => {
   const componentMeta = createComponentMetaManager(tsserver);
-  const htmlService = createMarkoHtmlService(componentMeta);
-  const baseService = htmlService.baseService;
+  let htmlData: html.IHTMLDataProvider[] = [getDefaultHTMLDataProvider()];
+  const htmlDataListeners = new Set<() => void>();
+  const baseService = createHtmlService({
+    documentSelector: ["marko"],
+    useDefaultDataProvider: false,
+    getDocumentContext(context) {
+      return {
+        resolveReference(ref, base) {
+          let baseUri = URI.parse(base);
+          const decoded = context.decodeEmbeddedDocumentUri(baseUri);
+          if (decoded) {
+            baseUri = decoded[0];
+          }
+
+          return resolveReference(ref, baseUri, context.env.workspaceFolders);
+        },
+      };
+    },
+    async getCustomData() {
+      return htmlData;
+    },
+    onDidChangeCustomData(listener) {
+      htmlDataListeners.add(listener);
+      return {
+        dispose() {
+          htmlDataListeners.delete(listener);
+        },
+      };
+    },
+  });
+
+  function updateExtraCustomData(
+    root: MarkoVirtualCode,
+    context: LanguageServiceContext,
+    componentMetaSession: MarkoComponentMetaSession | undefined,
+  ) {
+    htmlData = [
+      createMarkoDataProvider(
+        root,
+        componentMeta,
+        context,
+        componentMetaSession,
+      ),
+      getDefaultHTMLDataProvider(),
+    ];
+    htmlDataListeners.forEach((listener) => listener());
+  }
 
   return {
     name: "marko-template",
@@ -62,7 +115,8 @@ export const create = (
         resolveProvider: true,
         triggerCharacters: [
           ...new Set([
-            ...htmlService.triggerCharacters,
+            ...(baseService.capabilities.completionProvider
+              ?.triggerCharacters ?? []),
             ">",
             "@",
             "/",
@@ -82,7 +136,6 @@ export const create = (
           ]),
         ],
       },
-      documentSymbolProvider: baseService.capabilities.documentSymbolProvider,
       hoverProvider: true,
       definitionProvider: true,
     },
@@ -90,7 +143,12 @@ export const create = (
       const baseServiceInstance = baseService.create(context);
 
       return {
-        async provideCompletionItems(document, position, completionContext) {
+        async provideCompletionItems(
+          document,
+          position,
+          completionContext,
+          token,
+        ) {
           const templateContext = resolveMarkoTemplateContext(
             context,
             document,
@@ -108,7 +166,7 @@ export const create = (
           if (componentMetaSession) {
             await componentMetaSession.preloadTags(completionMetaTagNames);
           }
-          htmlService.updateCustomData(
+          updateExtraCustomData(
             templateContext.root,
             context,
             componentMetaSession,
@@ -128,23 +186,15 @@ export const create = (
 
           const htmlCompletion = isSourceOnlyCompletionContext(templateContext)
             ? undefined
-            : await provideHtmlCompletionItems(
-                {
-                  async provideCompletionItems(document, position, context) {
-                    return (
-                      (await Promise.resolve(
-                        baseServiceInstance.provideCompletionItems?.(
-                          document,
-                          position,
-                          context,
-                          {} as never,
-                        ),
-                      )) ?? undefined
-                    );
-                  },
-                },
-                templateContext,
-                completionContext,
+            : postProcessHtmlCompletionItems(
+                (await Promise.resolve(
+                  baseServiceInstance.provideCompletionItems?.(
+                    templateContext.document,
+                    templateContext.position,
+                    completionContext,
+                    token,
+                  ),
+                )) ?? undefined,
               );
 
           const tagSymbolCompletion = isOpenTagNameCompletionContext(
@@ -258,7 +308,7 @@ export const create = (
             );
           }
 
-          htmlService.updateCustomData(
+          updateExtraCustomData(
             templateContext.root,
             context,
             componentMetaSession,
@@ -278,25 +328,6 @@ export const create = (
           }
 
           return provideHover(templateContext, htmlHover);
-        },
-        provideDocumentSymbols(document) {
-          const templateContext = resolveMarkoTemplateContext(
-            context,
-            document,
-            document.positionAt(0),
-          );
-          if (!templateContext) {
-            return;
-          }
-
-          const decoded = context.decodeEmbeddedDocumentUri(
-            URI.parse(document.uri),
-          );
-          if (decoded && decoded[1] !== templateContext.root.id) {
-            return;
-          }
-
-          return provideMarkoDocumentSymbols(templateContext.root);
         },
         async resolveCompletionItem(item) {
           const data = getMarkoCompletionData(item);
@@ -470,6 +501,34 @@ function mapDefinitionOriginsToRequestDocument(
   });
 }
 
+function postProcessHtmlCompletionItems(list: CompletionList | undefined) {
+  if (!list?.items.length) {
+    return;
+  }
+
+  for (const item of list.items) {
+    const documentation =
+      typeof item.documentation === "string"
+        ? item.documentation
+        : item.documentation?.value;
+
+    if (
+      documentation?.includes("Custom Marko tag discovered") ||
+      documentation?.includes("Core Marko")
+    ) {
+      item.kind = 7;
+      item.sortText = `0${getCompletionInsertText(item)}`;
+    }
+
+    item.data = {
+      source: MARKO_TEMPLATE_SOURCE,
+      kind: MarkoCompletionKind.Html,
+    } satisfies MarkoCompletionData;
+  }
+
+  return list;
+}
+
 function shouldUseHtmlHover(
   templateContext: ReturnType<
     typeof resolveMarkoTemplateContext
@@ -600,6 +659,18 @@ function isModifierTarget(
   return modifierIndex !== -1 && offset > attrNode.start + modifierIndex;
 }
 
+function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
+  const current = root.markoAst.nodeAt(offset);
+  if (current?.type === NodeType.AttrName) {
+    return current;
+  }
+
+  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
+  if (previous?.type === NodeType.AttrName && previous.end === offset) {
+    return previous;
+  }
+}
+
 function shouldSkipEmbeddedSourceHover(
   decodedUri: ReturnType<LanguageServiceContext["decodeEmbeddedDocumentUri"]>,
   templateContext: ReturnType<
@@ -613,18 +684,6 @@ function shouldSkipEmbeddedSourceHover(
     decodedUri[1] !== templateContext.root.id &&
     !shouldUseSourceHoverFallback(templateContext)
   );
-}
-
-function getAttrNameNodeAtOffset(root: MarkoVirtualCode, offset: number) {
-  const current = root.markoAst.nodeAt(offset);
-  if (current?.type === NodeType.AttrName) {
-    return current;
-  }
-
-  const previous = offset > 0 ? root.markoAst.nodeAt(offset - 1) : undefined;
-  if (previous?.type === NodeType.AttrName && previous.end === offset) {
-    return previous;
-  }
 }
 
 function getConcreteMetaTagNames(
@@ -694,4 +753,12 @@ function isNativeHtmlTag(root: MarkoVirtualCode, tagName: string) {
 
 function isLowercaseTagName(tagName: string) {
   return tagName === tagName.toLowerCase();
+}
+
+function getCompletionInsertText(item: CompletionItem) {
+  if (item.textEdit) {
+    return item.textEdit.newText;
+  }
+
+  return item.insertText ?? String(item.label);
 }
