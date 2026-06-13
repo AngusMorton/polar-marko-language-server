@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 
+import { MarkoVirtualCode } from "@marko/language-core";
 import type {} from "mocha";
 import path from "path";
 import { performance } from "perf_hooks";
+import ts from "typescript";
 import { Position } from "vscode-languageserver-protocol/node";
 import { TextDocument } from "vscode-languageserver-textdocument";
 import { URI } from "vscode-uri";
@@ -199,6 +201,85 @@ describe("marko-template performance", () => {
     }
   });
 });
+
+describe("marko virtual code construction", () => {
+  // MarkoVirtualCode is rebuilt from scratch on every edit, so its construction
+  // cost is paid on every keystroke. It must scale linearly with file size;
+  // a regression to super-linear behaviour (for example an O(n^2) pass over the
+  // generated TypeScript tokens) makes typing in large components unusable.
+  it("scales sub-quadratically with file size", () => {
+    // Resolve Project config relative to a real fixture so the Marko taglib and
+    // translator load the same way they do for fixture-based tests.
+    const fileName = fixturePath("script", "basic", "index.marko");
+
+    const median = (components: number) => {
+      const code = generateLargeMarko(components);
+      const snapshot = createSnapshot(code);
+      // Warm taglib/project caches before timing.
+      new MarkoVirtualCode(fileName, snapshot, ts);
+      const samples: number[] = [];
+      for (let i = 0; i < 15; i++) {
+        const start = performance.now();
+        new MarkoVirtualCode(fileName, snapshot, ts);
+        samples.push(performance.now() - start);
+      }
+      samples.sort((a, b) => a - b);
+      return samples[Math.floor(samples.length / 2)]!;
+    };
+
+    const small = median(200);
+    const large = median(400);
+
+    // Linear scaling means doubling the input ~doubles the time. The previous
+    // O(n^2) mapping pass made this ratio ~4x. Allow generous head-room for
+    // machine variance while still catching a return to quadratic behaviour.
+    const ratio = large / Math.max(small, 0.01);
+    assert(
+      ratio < 3,
+      `virtual code construction scaled ${ratio.toFixed(
+        2,
+      )}x when doubling file size (small=${small.toFixed(
+        2,
+      )}ms large=${large.toFixed(2)}ms); expected near-linear (<3x)`,
+    );
+
+    // Absolute guard: a ~2400 line component must build well under the
+    // interactive budget. Before the fix this took ~300ms.
+    assert(
+      large < 200,
+      `virtual code construction for a large component took ${large.toFixed(
+        2,
+      )}ms (expected < 200ms)`,
+    );
+  });
+});
+
+function generateLargeMarko(components: number) {
+  const lines = [
+    "import FancyButton from '<fancy-button>';",
+    "static const greeting = 'hello';",
+    "<let/count=0/>",
+  ];
+  for (let i = 0; i < components; i++) {
+    lines.push(`<div class="box-${i}" data-idx=count + ${i}>`);
+    lines.push(
+      `  <fancy-button message=\`item ${i}\` onClick() { count++; } />`,
+    );
+    lines.push(`  <for|item, idx| of=[1, 2, 3]>`);
+    lines.push(`    <span>\${item} at \${idx}</span>`);
+    lines.push(`  </for>`);
+    lines.push(`</div>`);
+  }
+  return lines.join("\n");
+}
+
+function createSnapshot(text: string): ts.IScriptSnapshot {
+  return {
+    getText: (start, end) => text.slice(start, end),
+    getLength: () => text.length,
+    getChangeRange: () => undefined,
+  };
+}
 
 async function measureScenario(scenario: Scenario) {
   const server = await getLanguageServer();

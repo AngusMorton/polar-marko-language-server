@@ -31,12 +31,42 @@ export function parseScripts(
   // Volar will query every generated mapping whose feature flag allows it, so
   // remember the first generated occurrence as the editor-facing one.
   const firstGeneratedBySource = new Map<string, number>();
+  // Number of tokens that begin at a given source offset. Used to detect when a
+  // token ends exactly where another token begins without an O(n) rescan.
+  const tokenStartCounts = new Map<number, number>();
   for (const token of script.tokens) {
     const key = `${token.sourceStart}:${token.length}`;
     if (!firstGeneratedBySource.has(key)) {
       firstGeneratedBySource.set(key, token.generatedStart);
     }
+    tokenStartCounts.set(
+      token.sourceStart,
+      (tokenStartCounts.get(token.sourceStart) ?? 0) + 1,
+    );
   }
+
+  // Sorted, de-duplicated list of token source starts. `hasInternalOverlap`
+  // below needs to know whether any other token begins strictly inside the
+  // current token's source range; a binary search over this list answers that
+  // in O(log n) instead of scanning every token (which made the whole pass
+  // O(n^2) on large files).
+  const sortedTokenStarts = [...tokenStartCounts.keys()].sort((a, b) => a - b);
+  const hasTokenStartInRange = (afterOffset: number, beforeOffset: number) => {
+    // Find the first token start strictly greater than `afterOffset`.
+    let min = 0;
+    let max = sortedTokenStarts.length;
+    while (min < max) {
+      const mid = (min + max) >>> 1;
+      if (sortedTokenStarts[mid]! <= afterOffset) {
+        min = mid + 1;
+      } else {
+        max = mid;
+      }
+    }
+    return (
+      min < sortedTokenStarts.length && sortedTokenStarts[min]! < beforeOffset
+    );
+  };
 
   // Keep verification on every generated token so TypeScript still checks all
   // generated code, but expose hover/navigation/completion from only the primary
@@ -69,18 +99,15 @@ export function parseScripts(
     // Container tokens can cover later, more precise source tokens. If both are
     // semantic, Volar may prefer the wrapper expression over the real source
     // symbol, so overlapping containers stay verification-only.
-    const hasInternalOverlap = script.tokens.some((other) => {
-      return (
-        other !== token &&
-        other.sourceStart > token.sourceStart &&
-        other.sourceStart < sourceEnd
-      );
-    });
+    const hasInternalOverlap = hasTokenStartInRange(
+      token.sourceStart,
+      sourceEnd,
+    );
     const shouldTrimSemanticBoundary =
       (!/\w/.test(sourceText) || sourceText.includes("\n")) &&
-      script.tokens.some((other) => {
-        return other !== token && other.sourceStart === sourceEnd;
-      });
+      (tokenStartCounts.get(sourceEnd) ?? 0) -
+        (token.sourceStart === sourceEnd ? 1 : 0) >
+        0;
     const shouldTrimNameBoundary =
       !isAttrModifierExpression &&
       (sourceFeatureNode?.type === NodeType.OpenTagName ||
