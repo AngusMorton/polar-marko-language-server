@@ -7,9 +7,9 @@
   3 |
 ```
 
-1. `<Child>`
+1. `<Child>` (Class)
    documentation: Custom Marko tag discovered from: [../components/Child/index.js](file://<workspace>/src/__tests__/fixtures/script/completions-import-tags/components/Child/index.js)
-2. `<child-other>`
+2. `<child-other>` (Class)
    documentation: Custom Marko tag discovered from: [../components/child-other/index.js](file://<workspace>/src/__tests__/fixtures/script/completions-import-tags/components/child-other/index.js)
 
 ## Diagnostics

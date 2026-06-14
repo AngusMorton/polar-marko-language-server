@@ -4,7 +4,11 @@
   3 | static const value = { something: true };
   4 |
 > 5 | <FancyButton custom={ value } title="hello" />
-    |       ^ Input Props:
+    |       ^ Custom Marko tag discovered from:
+
+[../components/fancy-button.marko](file:///home/angus/marko/language-server/packages/volar-language-server/src/__tests__/fixtures/script/hover-routing/components/fancy-button.marko)
+
+Input Props:
 - `custom?: { value: { something: boolean; }; }`
 - `title?: string`
 - `a?: string`
@@ -47,7 +51,11 @@ export interface Input {
   3 | static const value = { something: true };
   4 |
 > 5 | <FancyButton custom={ value } title="hello" />
-    |             ^ Input Props:
+    |             ^ Custom Marko tag discovered from:
+
+[../components/fancy-button.marko](file:///home/angus/marko/language-server/packages/volar-language-server/src/__tests__/fixtures/script/hover-routing/components/fancy-button.marko)
+
+Input Props:
 - `custom?: { value: { something: boolean; }; }`
 - `title?: string`
 - `a?: string`
@@ -190,7 +198,11 @@ Icon name docs.
   26 | </FancyButton>
   27 |
 > 28 | <FancyButton />
-     |  ^^^^^^^^^^^ Input Props:
+     |  ^^^^^^^^^^^ Custom Marko tag discovered from:
+
+[../components/fancy-button.marko](file:///home/angus/marko/language-server/packages/volar-language-server/src/__tests__/fixtures/script/hover-routing/components/fancy-button.marko)
+
+Input Props:
 - `custom?: { value: { something: boolean; }; }`
 - `title?: string`
 - `a?: string`

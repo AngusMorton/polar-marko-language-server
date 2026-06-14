@@ -7,7 +7,7 @@
   3 |
 ```
 
-1. `</div>`
+1. `</div>` (Class)
    newText: `$0 </div>`
 
 ## Diagnostics

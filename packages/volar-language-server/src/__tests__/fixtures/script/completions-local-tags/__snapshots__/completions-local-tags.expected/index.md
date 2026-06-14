@@ -6,7 +6,7 @@
 > 4 | <fancy-button/>
     |   ^ Custom Marko tag discovered from:
 
-[../components/fancy-button/index.marko](file:///Users/angus/marko-language-server/packages/volar-language-server/src/__tests__/fixtures/script/completions-local-tags/components/fancy-button/index.marko)
+[../components/fancy-button/index.marko](file:///home/angus/marko/language-server/packages/volar-language-server/src/__tests__/fixtures/script/completions-local-tags/components/fancy-button/index.marko)
 
 I'm a JSDoc comment for the template.
 
@@ -38,6 +38,6 @@ export interface Input {
   4 | <fancy-button/>
 ```
 
-1. `fancy-button`
-   documentation: Custom Marko tag discovered from: [../components/fancy-button/index.marko](file://<workspace>/src/__tests__/fixtures/script/completions-local-tags/components/fancy-button/index.marko)...
+1. `fancy-button` (Class)
+   documentation: Custom Marko tag discovered from: [../components/fancy-button/index.marko](file://<workspace>/src/__tests__/fixtures/script/completions-local-tags/components/fancy-button/index.marko) ...
 

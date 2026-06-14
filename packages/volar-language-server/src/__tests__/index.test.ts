@@ -5,6 +5,7 @@ import path from "path";
 import {
   type CompletionItem,
   CompletionItemKind,
+  CompletionItemTag,
   type DocumentLink,
   type DocumentSymbol,
   type Location,
@@ -269,13 +270,7 @@ function getDiagnosticSourcePriority(source: string | undefined) {
 }
 
 function normalizeMessage(message: string) {
-  return message
-    .split(process.cwd())
-    .join("<workspace>")
-    .replace(
-      /type 'AttrMissing \| "button" \| "submit" \| "reset"'/g,
-      'type \'"button" | AttrMissing | "submit" | "reset"\'',
-    );
+  return message.split(process.cwd()).join("<workspace>");
 }
 
 // if (SHOULD_BENCH) {
@@ -321,6 +316,13 @@ function* getDefinitions(doc: TextDocument): Generator<Position> {
   }
 }
 
+// `CompletionItemKind` from vscode-languageserver is a namespace of name->value
+// constants, so a numeric reverse lookup (`CompletionItemKind[5]`) yields
+// undefined. Build the value->name map once so kinds render in snapshots.
+const COMPLETION_KIND_NAMES: Record<number, string> = Object.fromEntries(
+  Object.entries(CompletionItemKind).map(([name, value]) => [value, name]),
+);
+
 function renderCompletions(
   items: CompletionItem[],
   code: string,
@@ -343,9 +345,12 @@ function renderCompletions(
   let results = "";
   for (const [index, item] of items.slice(0, 4).entries()) {
     results += `${index + 1}. \`${item.label}\``;
-    const kind = item.kind && CompletionItemKind[item.kind];
+    const kind = item.kind && COMPLETION_KIND_NAMES[item.kind];
     if (kind) {
       results += ` (${kind})`;
+    }
+    if (item.tags?.includes(CompletionItemTag.Deprecated)) {
+      results += ` [deprecated]`;
     }
     results += "\n";
 

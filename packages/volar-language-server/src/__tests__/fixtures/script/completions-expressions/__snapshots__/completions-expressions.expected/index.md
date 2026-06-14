@@ -10,10 +10,10 @@
   6 | <div>${su}</div>
 ```
 
-1. `state`
-2. `submitValue`
-3. `Sanitizer`
-4. `satisfies`
+1. `state` (Variable)
+2. `submitValue` (Variable)
+3. `Sanitizer` (Variable)
+4. `satisfies` (Keyword)
 
 ### Ln 6, Col 10
 ```marko
@@ -25,10 +25,10 @@
   8 |
 ```
 
-1. `submitValue`
-2. `SubmitEvent`
-3. `SubtleCrypto`
-4. `super`
+1. `submitValue` (Variable)
+2. `SubmitEvent` (Variable)
+3. `SubtleCrypto` (Variable)
+4. `super` (Keyword)
 
 ## Diagnostics
 ### Ln 1, Col 14

@@ -2,7 +2,7 @@
 ### Ln 1, Col 14
 ```marko
 > 1 | <div data-x=#2/>
-    |              ^ Object literal may only specify known properties, and '2' does not exist in type 'Directives & Div'.
+    |              ^ Object literal may only specify known properties, and '2' does not exist in type 'Div'.
   2 |
   3 | <div onClick(a, %b) {
   4 |   console.log(#hello!);
@@ -13,7 +13,7 @@
   1 | <div data-x=#2/>
   2 |
 > 3 | <div onClick(a, %b) {
-    |     ^^^^^^^^^^^^^^ Argument of type 'number' is not assignable to parameter of type 'Directives & Div'.
+    |     ^^^^^^^^^^^^^^ Argument of type 'number' is not assignable to parameter of type 'Div'.
   Type 'number' is not assignable to type 'Div'.
   4 |   console.log(#hello!);
   5 | }/>

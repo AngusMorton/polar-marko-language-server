@@ -4,6 +4,7 @@ import type {
   ContentMeta,
   EventMeta,
   InputMeta,
+  JsDocTagMeta,
   ResultMeta,
   TagMeta,
 } from "@marko/component-meta";
@@ -62,7 +63,7 @@ export function formatInputTypeMetaDocumentation(
 export function formatInputMetaDocumentation(
   input: Pick<
     InputMeta,
-    "description" | "enumValues" | "name" | "required" | "type"
+    "description" | "enumValues" | "name" | "required" | "tags" | "type"
   >,
   fallbackDescription?: string,
 ) {
@@ -71,6 +72,11 @@ export function formatInputMetaDocumentation(
 
   if (description) {
     sections.push(description);
+  }
+
+  const tagDoc = formatJsDocTags(input.tags);
+  if (tagDoc) {
+    sections.push(tagDoc);
   }
 
   if (input.enumValues?.length) {
@@ -83,11 +89,18 @@ export function formatInputMetaDocumentation(
 }
 
 export function formatEventMetaDocumentation(
-  event: Pick<EventMeta, "description" | "name" | "signature" | "type">,
+  event: Pick<
+    EventMeta,
+    "description" | "name" | "signature" | "tags" | "type"
+  >,
 ) {
   const sections = [`\`${event.name}: ${event.signature || event.type}\``];
   if (event.description) {
     sections.push(event.description);
+  }
+  const tagDoc = formatJsDocTags(event.tags);
+  if (tagDoc) {
+    sections.push(tagDoc);
   }
   return sections.join("\n\n");
 }
@@ -97,7 +110,67 @@ export function formatAttrTagMetaDocumentation(attrTag: AttrTagMeta) {
   if (attrTag.description) {
     sections.push(attrTag.description);
   }
+  const tagDoc = formatJsDocTags(attrTag.tags);
+  if (tagDoc) {
+    sections.push(tagDoc);
+  }
   return sections.join("\n\n");
+}
+
+const JSDOC_LINK_REG =
+  /\{@(link|linkplain|linkcode) (https?:\/\/[^ |}]+?)(?:[| ]([^{}\n]+?))?\}/gi;
+// `@param`/`@returns`/`@template` are already reflected in the rendered type
+// signature, so showing them again on an attribute hover is just noise.
+const SKIPPED_JSDOC_TAGS = new Set([
+  "param",
+  "returns",
+  "return",
+  "template",
+  "typeparam",
+]);
+
+/**
+ * Renders JSDoc tags (`@deprecated`, `@default`, `@example`, `@see`, ...) the
+ * same way TypeScript quick-info does, so Marko hovers surface the metadata
+ * authors write instead of silently dropping it.
+ */
+export function formatJsDocTags(tags: readonly JsDocTagMeta[] | undefined) {
+  if (!tags?.length) {
+    return "";
+  }
+
+  const rendered: string[] = [];
+  for (const tag of tags) {
+    if (SKIPPED_JSDOC_TAGS.has(tag.name.toLowerCase())) {
+      continue;
+    }
+    rendered.push(formatJsDocTag(tag));
+  }
+
+  return rendered.join("\n\n");
+}
+
+function formatJsDocTag(tag: JsDocTagMeta) {
+  const name = `*@${tag.name}*`;
+  const text = tag.text;
+  if (!text) {
+    return name;
+  }
+
+  if (tag.name === "example" || tag.name === "default") {
+    const body = /^\s*[~`]{3}/m.test(text) ? text : `\`\`\`\n${text}\n\`\`\``;
+    return `${name}  \n${body}`;
+  }
+
+  const renderedText = text.replace(
+    JSDOC_LINK_REG,
+    (_, kind: string, link: string, label?: string) => {
+      const alt = label ? label.trim() : link;
+      return `[${kind === "linkcode" ? `\`${alt}\`` : alt}](${link})`;
+    },
+  );
+
+  return `${name}${/\r\n|\n/.test(renderedText) ? "  \n" : " — "}${renderedText}`;
 }
 
 function formatInputLine(input: Pick<InputMeta, "name" | "required" | "type">) {

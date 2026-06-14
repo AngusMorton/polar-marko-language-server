@@ -118,11 +118,20 @@ function getTagData(
       continue;
     }
 
+    const sourceLink = tagMeta.file
+      ? getCustomTagSourceLink(tagMeta.file, root.fileName)
+      : "";
+    const metaDocumentation = formatTagMetaDocumentation(tagMeta);
+
     tags.push({
       name: tagName,
       description: {
         kind: "markdown",
-        value: formatTagMetaDocumentation(tagMeta),
+        value: sourceLink
+          ? metaDocumentation
+            ? `${sourceLink}\n\n${metaDocumentation}`
+            : sourceLink
+          : metaDocumentation,
       },
       attributes: [],
     });
@@ -315,6 +324,31 @@ function shouldSkipTag(tag: TagDefinition) {
   );
 }
 
+/**
+ * Builds the "Custom Marko tag discovered from …" source link shown for custom
+ * tags, whether they are resolved from the taglib or imported by identifier, so
+ * both render consistently.
+ */
+function getCustomTagSourceLink(fileForTag: string, importer: string) {
+  // Component metadata reports the generated `*.marko.ts` virtual file; link to
+  // the authored `.marko` source instead.
+  fileForTag = fileForTag.replace(
+    /\.marko\.(?:[cm]?tsx?|[cm]?jsx?)$/,
+    ".marko",
+  );
+  const fileUri = URI.file(fileForTag).toString();
+  const nodeModuleMatch = /\/node_modules\/((?:@[^/]+\/)?[^/]+)/.exec(
+    fileForTag,
+  );
+  const nodeModuleName = nodeModuleMatch?.[1];
+
+  if (nodeModuleName && nodeModuleName !== "marko") {
+    return `Custom Marko tag discovered from the ["${nodeModuleName}"](${fileUri}) npm package.`;
+  }
+
+  return `Custom Marko tag discovered from:\n\n[${path.relative(importer, fileForTag)}](${fileUri})`;
+}
+
 function getTagDocumentation(
   tag: TagDefinition,
   importer: string,
@@ -322,7 +356,6 @@ function getTagDocumentation(
 ): MarkupContent {
   let value = "";
   const fileForTag = tag.template || tag.renderer || tag.filePath;
-  const fileUri = URI.file(fileForTag).toString();
   const nodeModuleMatch = /\/node_modules\/((?:@[^/]+\/)?[^/]+)/.exec(
     fileForTag,
   );
@@ -335,10 +368,8 @@ function getTagDocumentation(
     value = `Built in [&lt;${tag.name}&gt;](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/${tag.name}) HTML tag.`;
   } else if (isCoreTag) {
     value = `Core Marko &lt;${tag.name}&gt; tag.`;
-  } else if (nodeModuleName) {
-    value = `Custom Marko tag discovered from the ["${nodeModuleName}"](${fileUri}) npm package.`;
   } else {
-    value = `Custom Marko tag discovered from:\n\n[${path.relative(importer, fileForTag)}](${fileUri})`;
+    value = getCustomTagSourceLink(fileForTag, importer);
   }
 
   if (tag.description) {

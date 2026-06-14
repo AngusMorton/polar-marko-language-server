@@ -24,8 +24,8 @@
 ### Ln 1, Col 2
 ```marko
 > 1 | <test-tag|a|>
-    |  ^^^^^^^^ Type of computed property's value is '(a: "a") => Void', which is not assignable to type 'Body<["a"], { value: "a" | "b"; }>'.
-  Call signature return types 'Void' and 'MarkoReturn<{ value: "a" | "b"; }>' are incompatible.
+    |  ^^^^^^^^ Type of computed property's value is '(a: "a") => void', which is not assignable to type 'Body<["a"], { value: "a" | "b"; }>'.
+  Call signature return types 'void' and 'MarkoReturn<{ value: "a" | "b"; }>' are incompatible.
     The types of 'return' are incompatible between these types.
       Type 'void' is not assignable to type '{ value: "a" | "b"; }'.
   2 |   ${a}

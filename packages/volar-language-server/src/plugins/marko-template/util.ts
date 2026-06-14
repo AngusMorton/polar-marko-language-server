@@ -10,6 +10,7 @@ import type {
 } from "@volar/language-service";
 import { transformCompletionItem } from "@volar/language-service";
 import { convertCompletionInfo } from "volar-service-typescript/lib/utils/lspConverters";
+import { CompletionItemKind, CompletionItemTag } from "vscode-languageserver";
 import { URI } from "vscode-uri";
 
 import {
@@ -112,7 +113,7 @@ export async function provideHtmlCompletionItems(
       documentation?.includes("Custom Marko tag discovered") ||
       documentation?.includes("Core Marko")
     ) {
-      item.kind = 7;
+      item.kind = CompletionItemKind.Class;
       item.sortText = `0${getCompletionInsertText(item)}`;
     }
 
@@ -123,6 +124,48 @@ export async function provideHtmlCompletionItems(
   }
 
   return list;
+}
+
+export function isAttrNameCompletionContext(
+  templateContext: MarkoTemplateContext,
+) {
+  return (
+    templateContext.node?.type === NodeType.AttrName ||
+    templateContext.node?.type === NodeType.AttrNamed
+  );
+}
+
+export function isAttrValueCompletionContext(
+  templateContext: MarkoTemplateContext,
+) {
+  return templateContext.node?.type === NodeType.AttrValue;
+}
+
+/**
+ * Attribute value completions come from constrained value sets (enum/union
+ * members), so render them as enum members instead of the HTML service's
+ * default `Unit` kind, matching how TypeScript/Vue present literal choices.
+ */
+export function normalizeAttrValueCompletionKind(item: CompletionItem): void {
+  item.kind = CompletionItemKind.EnumMember;
+}
+
+// Matches event-handler attribute names/snippets: native `onclick`, component
+// `onSelect`/`on-select`, and the `on<event>` / `once<event>` binding snippets.
+const EVENT_ATTR_NAME_REG = /^on[-<A-Za-z]/;
+
+/**
+ * Normalizes the kind of an attribute-name completion so every source (HTML
+ * data provider, Marko component metadata, taglib) renders with the same
+ * Vue-style icon: an event glyph for handlers, a keyword glyph for Marko
+ * directives/modifiers, and a field glyph for ordinary props/attributes.
+ */
+export function normalizeAttrCompletionKind(item: CompletionItem): void {
+  if (EVENT_ATTR_NAME_REG.test(item.label)) {
+    item.kind = CompletionItemKind.Event;
+  } else if (item.kind !== CompletionItemKind.Keyword) {
+    item.kind = CompletionItemKind.Field;
+  }
 }
 
 export function transformSourceCompletionList(
@@ -263,7 +306,7 @@ export function mergeCompletionLists(
       }
 
       seen.add(key);
-      items.push(item);
+      items.push(markDeprecatedCompletionItem(item));
     }
   }
 
@@ -275,6 +318,30 @@ export function mergeCompletionLists(
     isIncomplete,
     items,
   };
+}
+
+const DEPRECATED_DOC_REG = /(?:^|\s)\*?@deprecated\b/i;
+
+/**
+ * Flags a completion whose documentation carries an `@deprecated` JSDoc tag so
+ * editors render it with a strikethrough, matching how Vue surfaces deprecated
+ * props/components.
+ */
+function markDeprecatedCompletionItem(item: CompletionItem): CompletionItem {
+  if (item.tags?.includes(CompletionItemTag.Deprecated)) {
+    return item;
+  }
+
+  const documentation =
+    typeof item.documentation === "string"
+      ? item.documentation
+      : item.documentation?.value;
+  if (!documentation || !DEPRECATED_DOC_REG.test(documentation)) {
+    return item;
+  }
+
+  item.tags = [...(item.tags ?? []), CompletionItemTag.Deprecated];
+  return item;
 }
 
 export function getMarkoCompletionData(item: CompletionItem) {

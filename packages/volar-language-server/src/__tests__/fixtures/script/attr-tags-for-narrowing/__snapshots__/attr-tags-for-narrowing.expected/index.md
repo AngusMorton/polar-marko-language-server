@@ -44,10 +44,10 @@ Values: `large`, `small`
    5 |   </for>
    6 |   <for of=[1, 2, 3]>
 >  7 |     <@item size="small"/>
-     |      ^^^^^ Type 'AttrTag<{ readonly size: "small"; readonly [Symbol.iterator]: any; }> | AttrTag<{ readonly size: "huge"; readonly [Symbol.iterator]: any; }>' is not assignable to type 'AttrTag<{ size?: "small" | "large" | undefined; }> | undefined'.
-  Type 'AttrTag<{ readonly size: "huge"; readonly [Symbol.iterator]: any; }>' is not assignable to type 'AttrTag<{ size?: "small" | "large" | undefined; }> | undefined'.
-    Type 'AttrTag<{ readonly size: "huge"; readonly [Symbol.iterator]: any; }>' is not assignable to type 'AttrTag<{ size?: "small" | "large" | undefined; }>'.
-      Type 'AttrTag<{ readonly size: "huge"; readonly [Symbol.iterator]: any; }>' is not assignable to type '{ size?: "small" | "large" | undefined; }'.
+     |      ^^^^^ Type 'AttrTag<{ readonly size: "small"; }> | AttrTag<{ readonly size: "huge"; }>' is not assignable to type 'AttrTag<{ size?: "small" | "large" | undefined; }> | undefined'.
+  Type 'AttrTag<{ readonly size: "huge"; }>' is not assignable to type 'AttrTag<{ size?: "small" | "large" | undefined; }> | undefined'.
+    Type 'AttrTag<{ readonly size: "huge"; }>' is not assignable to type 'AttrTag<{ size?: "small" | "large" | undefined; }>'.
+      Type 'AttrTag<{ readonly size: "huge"; }>' is not assignable to type '{ size?: "small" | "large" | undefined; }'.
         Types of property 'size' are incompatible.
           Type '"huge"' is not assignable to type '"small" | "large" | undefined'.
    8 |           // ^?

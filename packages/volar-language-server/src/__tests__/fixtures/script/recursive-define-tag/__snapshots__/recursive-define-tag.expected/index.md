@@ -5,7 +5,7 @@
    8 |
 >  9 | <define/Section|{ children = []}: Help|>
      |            ^ const Section: {
-    content: ({ children }: Help) => Void;
+    content: ({ children }: Help) => void;
 }
   10 |         // ^?
   11 |   <for|{ children }| of=children>

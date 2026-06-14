@@ -8,7 +8,7 @@
   4 | <div>
 ```
 
-1. `span`
+1. `span` (Property)
    documentation: Built in [&lt;span&gt;](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/span) HTML tag.
 
 ### Ln 4, Col 6

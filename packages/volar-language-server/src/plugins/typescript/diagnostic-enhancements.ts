@@ -3,8 +3,130 @@ import {
   type Mapper,
   shouldReportDiagnostics,
 } from "@volar/language-core";
-import type { Diagnostic } from "@volar/language-server";
+import type {
+  CompletionItem,
+  Diagnostic,
+  Hover,
+  MarkupContent,
+} from "@volar/language-server";
 import type { TextDocument } from "vscode-languageserver-textdocument";
+
+/**
+ * The TypeScript code Marko generates for a template references a handful of
+ * internal helper types that are meaningless to template authors. Left alone
+ * they leak verbatim into diagnostic messages (e.g. `does not exist in type
+ * 'Directives & Input'`). Vue keeps its `__VLS_` internals out of user-facing
+ * messages; we do the same for Marko's glue so errors read in template terms.
+ */
+export function cleanMarkoDiagnostics(diagnostics: Diagnostic[]): Diagnostic[] {
+  return diagnostics.map((diagnostic) => {
+    const message = cleanMarkoDiagnosticMessage(diagnostic.message);
+    const relatedInformation = diagnostic.relatedInformation?.map((related) => {
+      const relatedMessage = cleanMarkoDiagnosticMessage(related.message);
+      return relatedMessage === related.message
+        ? related
+        : { ...related, message: relatedMessage };
+    });
+
+    if (
+      message === diagnostic.message &&
+      relatedInformation === diagnostic.relatedInformation
+    ) {
+      return diagnostic;
+    }
+
+    return { ...diagnostic, message, relatedInformation };
+  });
+}
+
+export function cleanMarkoDiagnosticMessage(message: string): string {
+  return cleanMarkoTypeArtifacts(message);
+}
+
+/**
+ * Strips Marko's internal generated helper types from any text that displays a
+ * TypeScript type (diagnostic messages, hover quick-info, completion details).
+ */
+export function cleanMarkoTypeArtifacts(text: string): string {
+  return (
+    text
+      // `Marko.Directives` is intersected into every tag's attribute type to
+      // allow global directives (`class`, `key`, event handlers, ...). It is
+      // never something the author wrote, so drop it from the displayed type.
+      .replace(/(?:Marko\.)?Directives & /g, "")
+      .replace(/ & (?:Marko\.)?Directives\b/g, "")
+      // Attribute-tag types carry a synthetic iterator member so they can be
+      // both spread and repeated. It is pure glue inside `AttrTag<{ ... }>`.
+      .replace(/(?:readonly )?\[Symbol\.iterator\]: any;\s*/g, "")
+      // `AttrMissing` is the sentinel that marks an attribute as optional; it
+      // only adds noise to value-type unions shown to the author.
+      .replace(/ \| AttrMissing\b/g, "")
+      .replace(/\bAttrMissing \| /g, "")
+      // `Marko.Void` is a branded stand-in for `void` used by generated body
+      // signatures; display it as plain `void`.
+      .replace(/\bVoid\b/g, "void")
+  );
+}
+
+/** Scrubs internal Marko types from a hover's rendered contents in place. */
+export function cleanMarkoHover<T extends Hover>(hover: T): T {
+  const contents = hover.contents;
+  if (typeof contents === "string") {
+    return { ...hover, contents: cleanMarkoTypeArtifacts(contents) };
+  }
+
+  if (Array.isArray(contents)) {
+    return {
+      ...hover,
+      contents: contents.map((entry) =>
+        typeof entry === "string"
+          ? cleanMarkoTypeArtifacts(entry)
+          : { ...entry, value: cleanMarkoTypeArtifacts(entry.value) },
+      ),
+    };
+  }
+
+  if (contents && typeof contents === "object" && "value" in contents) {
+    return {
+      ...hover,
+      contents: { ...contents, value: cleanMarkoTypeArtifacts(contents.value) },
+    };
+  }
+
+  return hover;
+}
+
+/** Scrubs internal Marko types from a completion item's detail/documentation. */
+export function cleanMarkoCompletionItem<T extends CompletionItem>(item: T): T {
+  const detail =
+    item.detail === undefined
+      ? undefined
+      : cleanMarkoTypeArtifacts(item.detail);
+  const documentation = cleanMarkoMarkup(item.documentation);
+
+  if (detail === item.detail && documentation === item.documentation) {
+    return item;
+  }
+
+  return { ...item, detail, documentation };
+}
+
+function cleanMarkoMarkup(
+  documentation: string | MarkupContent | undefined,
+): string | MarkupContent | undefined {
+  if (documentation === undefined) {
+    return undefined;
+  }
+
+  if (typeof documentation === "string") {
+    return cleanMarkoTypeArtifacts(documentation);
+  }
+
+  return {
+    ...documentation,
+    value: cleanMarkoTypeArtifacts(documentation.value),
+  };
+}
 
 export function enhanceDiagnosticPositions(
   diagnostics: Diagnostic[],

@@ -28,7 +28,7 @@
 > 11 | <fancy-button />
      |             ^ Custom Marko tag discovered from:
 
-[../components/fancy-button/index.marko](file:///Users/angus/marko-language-server/packages/volar-language-server/src/__tests__/fixtures/script/navigation/components/fancy-button/index.marko)
+[../components/fancy-button/index.marko](file:///home/angus/marko/language-server/packages/volar-language-server/src/__tests__/fixtures/script/navigation/components/fancy-button/index.marko)
 
 Input Props:
 - `message?: string`
@@ -78,7 +78,11 @@ export interface Input {
   12 | //      ^!  ^?
   13 |
 > 14 | <FancyButton />
-     |          ^ Input Props:
+     |          ^ Custom Marko tag discovered from:
+
+[../components/fancy-button/index.marko](file:///home/angus/marko/language-server/packages/volar-language-server/src/__tests__/fixtures/script/navigation/components/fancy-button/index.marko)
+
+Input Props:
 - `message?: string`
 - `tone?: "info" | "warning"`
 - `custom?: { temp: boolean; options: boolean; }`

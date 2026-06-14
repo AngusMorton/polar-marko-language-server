@@ -1,0 +1,22 @@
+export interface Input {
+  /**
+   * The button label.
+   * @deprecated Use the `content` body instead.
+   * @default "Submit"
+   */
+  label?: string;
+  /**
+   * Visual size of the button.
+   * @example
+   * <fancy-button size="lg"/>
+   * @see https://example.com/buttons
+   */
+  size?: "sm" | "lg";
+  /**
+   * Fired when the button is selected.
+   * @deprecated Listen for `onActivate` instead.
+   */
+  onSelect?(value: string): void;
+}
+
+<button>${input.label}</button>

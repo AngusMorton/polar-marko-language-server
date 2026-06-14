@@ -33,9 +33,13 @@ import type { MarkoTsServer } from "./tsserver";
 import {
   getMarkoCompletionData,
   getScriptCompletionDocument,
+  isAttrNameCompletionContext,
+  isAttrValueCompletionContext,
   isOpenTagNameCompletionContext,
   type MarkoTemplateContext,
   mergeCompletionLists,
+  normalizeAttrCompletionKind,
+  normalizeAttrValueCompletionKind,
   provideHtmlCompletionItems,
   provideScriptTagSymbolCompletions,
   resolveMarkoTemplateContext,
@@ -154,11 +158,25 @@ export const create = (
               )
             : undefined;
 
-          return mergeCompletionLists(
+          const merged = mergeCompletionLists(
             transformedSourceOnlyCompletion,
             tagSymbolCompletion,
             htmlCompletion,
           );
+
+          if (merged) {
+            if (isAttrNameCompletionContext(templateContext)) {
+              for (const item of merged.items) {
+                normalizeAttrCompletionKind(item);
+              }
+            } else if (isAttrValueCompletionContext(templateContext)) {
+              for (const item of merged.items) {
+                normalizeAttrValueCompletionKind(item);
+              }
+            }
+          }
+
+          return merged;
         },
         async provideDefinition(document, position) {
           const templateContext = resolveMarkoTemplateContext(
@@ -224,6 +242,15 @@ export const create = (
           }
 
           if (!shouldUseHtmlHover(templateContext)) {
+            // The source hover is derived from the Marko AST, so a position that
+            // maps into several embedded codes (e.g. both `html` and `root`)
+            // would otherwise yield an identical hover from each, which Volar
+            // merges into a duplicated tooltip. Emit it only for the canonical
+            // `root` virtual code (or the raw source document).
+            if (decodedUri && decodedUri[1] !== templateContext.root.id) {
+              return;
+            }
+
             return provideHover(
               templateContext,
               undefined,

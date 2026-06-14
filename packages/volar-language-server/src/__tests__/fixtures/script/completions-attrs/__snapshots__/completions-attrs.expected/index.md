@@ -8,7 +8,7 @@
   4 | <fancy-button on/>
 ```
 
-1. `message`
+1. `message` (Field)
    newText: `message="$1"$0`
    documentation: \`message: string\`
 
@@ -23,16 +23,16 @@
   7 | <div cla/>
 ```
 
-1. `on<event>("<method>")?`
+1. `on<event>("<method>")?` (Event)
    newText: `on${1:Click}("handle${2:Button}${1:Click}")`
    documentation: [More Info](https://markojs.com/docs/components/#attaching-dom-event-listeners)
-2. `once<event>("<method>")?`
+2. `once<event>("<method>")?` (Event)
    newText: `once${1:Click}("handle${2:Button}${1:Click}")`
    documentation: [More Info](https://markojs.com/docs/components/#attaching-dom-event-listeners)
-3. `onabort?`
+3. `onabort?` (Event)
    newText: `onabort=`
    documentation: \`onabort?: null | string | false\`
-4. `onauxclick?`
+4. `onauxclick?` (Event)
    newText: `onauxclick=`
    documentation: \`onauxclick?: null | string | false\`
 
@@ -47,7 +47,7 @@
   10 | <div id:s/>
 ```
 
-1. `class`
+1. `class` (Field)
 
 ### Ln 10, Col 10
 ```marko
@@ -60,7 +60,7 @@
   13 | <button type="su"/>
 ```
 
-1. `scoped`
+1. `scoped` (Keyword)
    detail: Use to prefix with a unique ID
 
 ### Ln 13, Col 17
@@ -73,13 +73,13 @@
   15 |
 ```
 
-1. `submit`
+1. `submit` (EnumMember)
 
 ## Diagnostics
 ### Ln 1, Col 15
 ```marko
 > 1 | <fancy-button mess/>
-    |               ^^^^ Object literal may only specify known properties, and '"mess"' does not exist in type 'Directives & Input'.
+    |               ^^^^ Object literal may only specify known properties, and '"mess"' does not exist in type 'Input'.
   2 | //                ^|
   3 |
   4 | <fancy-button on/>
@@ -90,7 +90,7 @@
   2 | //                ^|
   3 |
 > 4 | <fancy-button on/>
-    |               ^^ Object literal may only specify known properties, and '"on"' does not exist in type 'Directives & Input'.
+    |               ^^ Object literal may only specify known properties, and '"on"' does not exist in type 'Input'.
   5 | //              ^|
   6 |
   7 | <div cla/>
@@ -101,7 +101,7 @@
    5 | //              ^|
    6 |
 >  7 | <div cla/>
-     |      ^^^ Object literal may only specify known properties, and '"cla"' does not exist in type 'Directives & Div'.
+     |      ^^^ Object literal may only specify known properties, and '"cla"' does not exist in type 'Div'.
    8 | //      ^|
    9 |
   10 | <div id:s/>
@@ -112,7 +112,7 @@
   11 | //       ^|
   12 |
 > 13 | <button type="su"/>
-     |         ^^^^ Type '"su"' is not assignable to type '"button" | AttrMissing | "submit" | "reset"'.
+     |         ^^^^ Type '"su"' is not assignable to type '"button" | "submit" | "reset"'.
   14 | //              ^|
   15 |
 ```

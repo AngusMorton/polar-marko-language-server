@@ -9,8 +9,8 @@
   7 |
 ```
 
-1. `TestTagA`
-2. `TestTagB`
+1. `TestTagA` (Class)
+2. `TestTagB` (Class)
    documentation: Custom Marko tag discovered from: [../components/TestTagB.marko](file://<workspace>/src/__tests__/fixtures/script/completions-identifier-tags/components/TestTagB.marko)
 
 ## Diagnostics
