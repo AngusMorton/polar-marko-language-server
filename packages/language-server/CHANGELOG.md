@@ -1,5 +1,45 @@
 # Change Log
 
+## 3.0.4
+
+### Patch Changes
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fixes for reference finding and document highlights from tag variables.
+
+- Updated dependencies [[`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1), [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1), [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1), [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1), [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1), [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1)]:
+  - @marko/language-tools@2.5.62
+
+## 3.0.3
+
+### Patch Changes
+
+- [#507](https://github.com/marko-js/language-server/pull/507) [`3401932`](https://github.com/marko-js/language-server/commit/3401932f256c3e564e1249316a067b4600f709cc) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Detect the `Input` type when it is imported into the module scope (eg `import { Input } from "..."` or `import type { Input } from "..."`) instead of only an inline `interface`/`type` declaration.
+
+- Updated dependencies [[`3401932`](https://github.com/marko-js/language-server/commit/3401932f256c3e564e1249316a067b4600f709cc)]:
+  - @marko/language-tools@2.5.61
+
+## 3.0.2
+
+### Patch Changes
+
+- [#500](https://github.com/marko-js/language-server/pull/500) [`4be96c5`](https://github.com/marko-js/language-server/commit/4be96c5b0b894e943170fae387318d43fec511e4) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix several smaller Windows path handling issues: auto import completion details no longer show absolute paths, go to definition for tags declared in a `marko.json` now jumps to the tag's entry, and tags discovered from npm packages show their package documentation again. Also fix taglib cache invalidation not firing for `marko.json` changes (only `marko-tag.json`) and a stateful regex that could flip the default script language between projects.
+
+- [#500](https://github.com/marko-js/language-server/pull/500) [`4be96c5`](https://github.com/marko-js/language-server/commit/4be96c5b0b894e943170fae387318d43fec511e4) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix incorrect diagnostic and mapping positions on Windows. File paths are now canonicalized to native separators before script extraction so the generated code (which embeds relative import paths for custom tags) is identical regardless of how the file name was spelled, and extracted snapshot caches now use canonicalized keys so cache eviction works when TypeScript and the file system disagree on path separators.
+
+- [#503](https://github.com/marko-js/language-server/pull/503) [`07f8a15`](https://github.com/marko-js/language-server/commit/07f8a15cdfb0e783c7e30ec6abbd9747e7839acb) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix issue when using the language server with zed editor.
+
+- Updated dependencies [[`4be96c5`](https://github.com/marko-js/language-server/commit/4be96c5b0b894e943170fae387318d43fec511e4), [`4be96c5`](https://github.com/marko-js/language-server/commit/4be96c5b0b894e943170fae387318d43fec511e4)]:
+  - @marko/language-tools@2.5.60
+
+## 3.0.1
+
+### Patch Changes
+
+- [#495](https://github.com/marko-js/language-server/pull/495) [`5e05dff`](https://github.com/marko-js/language-server/commit/5e05dffdf0d521cf456b7ba27598c98dc6575185) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Prefer intersection for dynamic tag input types to improve type checking performance.
+
+- Updated dependencies [[`5e05dff`](https://github.com/marko-js/language-server/commit/5e05dffdf0d521cf456b7ba27598c98dc6575185)]:
+  - @marko/language-tools@2.5.59
+
 ## 3.0.0
 
 ### Major Changes

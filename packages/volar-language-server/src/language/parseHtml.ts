@@ -33,7 +33,8 @@ function generateMappingsFromExtracted(extracted: Extracted): CodeMapping[] {
     return {
       sourceOffsets: [it.sourceStart],
       generatedOffsets: [it.generatedStart],
-      lengths: [it.length],
+      lengths: [it.sourceLength],
+      generatedLengths: [it.generatedLength],
       data: {
         completion: true,
         format: false,

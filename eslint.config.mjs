@@ -8,8 +8,8 @@ export default defineConfig(
   {
     ignores: [
       ".vscode",
-      "coverage",
       "**/.vscode-test",
+      "coverage",
       "**/dist",
       "**/__snapshots__",
     ],

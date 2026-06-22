@@ -124,7 +124,7 @@
   ],
   "devDependencies": {
     "@marko/volar-language-server": "^2.0.3",
-    "@types/vscode": "^1.80.0",
+    "@types/vscode": "^1.116.0",
     "@volar/language-server": "^2.4.14",
     "@volar/vscode": "^2.4.14",
     "@vscode/test-electron": "^2.5.2",
@@ -134,7 +134,7 @@
     "vscode-languageclient": "^9.0.1"
   },
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.116.0"
   },
   "icon": "img/marko.png"
 }
