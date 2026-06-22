@@ -1,6 +1,7 @@
 import type { TaglibLookup } from "@marko/compiler/babel-utils";
 import {
   extractScript,
+  Mapping,
   NodeType,
   parse,
   Project,
@@ -26,6 +27,16 @@ export function parseScripts(
   });
   const scriptText = script.toString();
 
+  // Only `full` tokens are the primary, editor-facing source<->generated
+  // mapping (this mirrors the extractor's own `#sourceToGeneratedView`, which
+  // also considers `full` tokens only). `alias` tokens are secondary source
+  // links and `anchor` tokens are zero-width diagnostic markers; neither should
+  // drive the editor-feature heuristics below (which dedupe and compare real
+  // generated occurrences), so both stay verification-only.
+  const fullTokens = script.tokens.filter(
+    (token) => token.mapping === Mapping.full,
+  );
+
   // Marko often emits the same source token multiple times in generated TS
   // (for example, once for the public value and again for change plumbing).
   // Volar will query every generated mapping whose feature flag allows it, so
@@ -34,8 +45,8 @@ export function parseScripts(
   // Number of tokens that begin at a given source offset. Used to detect when a
   // token ends exactly where another token begins without an O(n) rescan.
   const tokenStartCounts = new Map<number, number>();
-  for (const token of script.tokens) {
-    const key = `${token.sourceStart}:${token.length}`;
+  for (const token of fullTokens) {
+    const key = `${token.sourceStart}:${token.sourceLength}`;
     if (!firstGeneratedBySource.has(key)) {
       firstGeneratedBySource.set(key, token.generatedStart);
     }
@@ -74,13 +85,38 @@ export function parseScripts(
   // editor features and prevents duplicate or internal hovers from generated
   // implementation details.
   const mappings: CodeMapping[] = script.tokens.flatMap((token) => {
-    const sourceEnd = token.sourceStart + token.length;
-    const key = `${token.sourceStart}:${token.length}`;
+    // This full-length mapping is always available for diagnostics. Editor
+    // features are opt-in below only when the generated token is the best user
+    // visible representation of the source token. `generatedLengths` keeps the
+    // generated side accurate for anchors, whose generated width is zero.
+    const mapping: CodeMapping = {
+      sourceOffsets: [token.sourceStart],
+      generatedOffsets: [token.generatedStart],
+      lengths: [token.sourceLength],
+      generatedLengths: [token.generatedLength],
+      data: {
+        completion: false,
+        format: false,
+        navigation: false,
+        semantic: false,
+        structure: false,
+        verification: true,
+      },
+    };
+
+    // Only `full` tokens are editor-facing; `alias`/`anchor` tokens carry
+    // diagnostics only.
+    if (token.mapping !== Mapping.full) {
+      return [mapping];
+    }
+
+    const sourceEnd = token.sourceStart + token.sourceLength;
+    const key = `${token.sourceStart}:${token.sourceLength}`;
     const sourceText = parsed.code.slice(token.sourceStart, sourceEnd);
     const sourceNode = getNodeAtTokenStart(parsed, token.sourceStart);
     const sourceInnerNode = getNodeAtTokenStart(
       parsed,
-      token.sourceStart + Math.min(1, Math.max(0, token.length - 1)),
+      token.sourceStart + Math.min(1, Math.max(0, token.sourceLength - 1)),
     );
     const sourceFeatureNode =
       sourceInnerNode?.type === NodeType.OpenTagName ||
@@ -119,23 +155,6 @@ export function parseScripts(
     const shouldUsePreciseAttrValueNavigation =
       sourceFeatureNode?.type === NodeType.AttrValue;
 
-    // This full-length mapping is always available for diagnostics. Editor
-    // features are opt-in below only when the generated token is the best user
-    // visible representation of the source token.
-    const mapping: CodeMapping = {
-      sourceOffsets: [token.sourceStart],
-      generatedOffsets: [token.generatedStart],
-      lengths: [token.length],
-      data: {
-        completion: false,
-        format: false,
-        navigation: false,
-        semantic: false,
-        structure: false,
-        verification: true,
-      },
-    };
-
     if (!isPrimary || hasInternalOverlap) {
       return [mapping];
     }
@@ -143,10 +162,10 @@ export function parseScripts(
     // Volar treats source-map ends as valid hover targets, so trim editor-facing name
     // mappings to keep whitespace after tag/attr names from resolving to TS.
     const semanticLength = shouldTrimNameBoundary
-      ? token.length - 1
+      ? token.sourceLength - 1
       : shouldTrimSemanticBoundary
-        ? token.length - 1
-        : token.length;
+        ? token.sourceLength - 1
+        : token.sourceLength;
 
     // Boundary mappings that end exactly where a real token starts can make
     // hovers on the real token resolve to adjacent whitespace/wrapper code. Trim
@@ -174,7 +193,7 @@ export function parseScripts(
         ? {
             sourceOffsets: [token.sourceStart],
             generatedOffsets: [token.generatedStart],
-            lengths: [token.length],
+            lengths: [token.sourceLength],
             data: {
               completion: true,
               format: false,

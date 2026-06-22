@@ -1,5 +1,41 @@
 # @marko/language-tools
 
+## 2.5.62
+
+### Patch Changes
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix return type extraction when outputting jsdoc.
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix mutaton tracking when a for loop is used without a variable declaration.
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Refactor script extractor to allow for multi in/out source mapping. This allows for hoisted tag variables from multiple sources to all be sourcemapped correctly.
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix scope mutation tracking when assigning with a destructure pattern.
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix overlapping mappings in extractor now always leading to consistent tokens. This was a problem for eg default values which sometimes linked to the value attribute instead of the literal value expression.
+
+- [#512](https://github.com/marko-js/language-server/pull/512) [`35a1050`](https://github.com/marko-js/language-server/commit/35a10509b84a0ae9efddfde2903446f2c50b8de1) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Refactor extractor to have "anchor" feature which allows mapping back arbitrary code points from the typescript to arbitrary source code. Previously we relied on injected comment mapping and whitespace copying which was both brittle and noisy.
+
+## 2.5.61
+
+### Patch Changes
+
+- [#507](https://github.com/marko-js/language-server/pull/507) [`3401932`](https://github.com/marko-js/language-server/commit/3401932f256c3e564e1249316a067b4600f709cc) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Detect the `Input` type when it is imported into the module scope (eg `import { Input } from "..."` or `import type { Input } from "..."`) instead of only an inline `interface`/`type` declaration.
+
+## 2.5.60
+
+### Patch Changes
+
+- [#500](https://github.com/marko-js/language-server/pull/500) [`4be96c5`](https://github.com/marko-js/language-server/commit/4be96c5b0b894e943170fae387318d43fec511e4) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix several smaller Windows path handling issues: auto import completion details no longer show absolute paths, go to definition for tags declared in a `marko.json` now jumps to the tag's entry, and tags discovered from npm packages show their package documentation again. Also fix taglib cache invalidation not firing for `marko.json` changes (only `marko-tag.json`) and a stateful regex that could flip the default script language between projects.
+
+- [#500](https://github.com/marko-js/language-server/pull/500) [`4be96c5`](https://github.com/marko-js/language-server/commit/4be96c5b0b894e943170fae387318d43fec511e4) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Fix incorrect diagnostic and mapping positions on Windows. File paths are now canonicalized to native separators before script extraction so the generated code (which embeds relative import paths for custom tags) is identical regardless of how the file name was spelled, and extracted snapshot caches now use canonicalized keys so cache eviction works when TypeScript and the file system disagree on path separators.
+
+## 2.5.59
+
+### Patch Changes
+
+- [#495](https://github.com/marko-js/language-server/pull/495) [`5e05dff`](https://github.com/marko-js/language-server/commit/5e05dffdf0d521cf456b7ba27598c98dc6575185) Thanks [@DylanPiercey](https://github.com/DylanPiercey)! - Prefer intersection for dynamic tag input types to improve type checking performance.
+
 ## 2.5.58
 
 ### Patch Changes

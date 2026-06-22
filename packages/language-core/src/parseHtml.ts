@@ -31,14 +31,15 @@ export function parseHtml(
 function generateMappingsFromExtracted(extracted: Extracted): CodeMapping[] {
   return extracted.tokens.map((it) => {
     const sourceNode = extracted.parsed.nodeAt(
-      it.sourceStart + Math.min(1, Math.max(0, it.length - 1)),
+      it.sourceStart + Math.min(1, Math.max(0, it.sourceLength - 1)),
     );
     const isAttrValue = sourceNode?.type === NodeType.AttrValue;
 
     return {
       sourceOffsets: [it.sourceStart],
       generatedOffsets: [it.generatedStart],
-      lengths: [it.length],
+      lengths: [it.sourceLength],
+      generatedLengths: [it.generatedLength],
       data: {
         completion: !isAttrValue,
         format: false,

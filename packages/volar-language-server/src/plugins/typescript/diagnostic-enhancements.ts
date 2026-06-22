@@ -146,33 +146,45 @@ export function enhanceDiagnosticPositions(
     }
 
     // TypeScript sometimes reports a span that starts or ends in generated glue.
-    // Clip to the reportable generated overlap, then verify Volar can map it.
-    const reportableRange = getReportableGeneratedRange(
-      scriptStartOffset,
-      scriptEndOffset,
-      map,
-      shouldReport,
-    );
-    if (!reportableRange) return diagnostic;
-
-    if (
-      !mapsToSourceRange(
+    // First try clipping to the reportable generated overlap (real copied
+    // tokens, the most precise target). Failing that, fall back to an anchor
+    // point inside the span: anchors are zero-width generated markers the
+    // extractor leaves in synthesized code so a diagnostic with no copied token
+    // of its own can still be pulled back to a source range.
+    for (const reportableRange of [
+      getReportableGeneratedRange(
+        scriptStartOffset,
+        scriptEndOffset,
         map,
-        reportableRange.start,
-        reportableRange.end,
         shouldReport,
-      )
-    ) {
-      return diagnostic;
+      ),
+      getAnchoredGeneratedRange(
+        scriptStartOffset,
+        scriptEndOffset,
+        map,
+        shouldReport,
+      ),
+    ]) {
+      if (
+        reportableRange &&
+        mapsToSourceRange(
+          map,
+          reportableRange.start,
+          reportableRange.end,
+          shouldReport,
+        )
+      ) {
+        return {
+          ...diagnostic,
+          range: {
+            start: document.positionAt(reportableRange.start),
+            end: document.positionAt(reportableRange.end),
+          },
+        };
+      }
     }
 
-    return {
-      ...diagnostic,
-      range: {
-        start: document.positionAt(reportableRange.start),
-        end: document.positionAt(reportableRange.end),
-      },
-    };
+    return diagnostic;
   });
 }
 
@@ -222,6 +234,39 @@ function getReportableGeneratedRange(
 
   if (start !== undefined && end !== undefined) {
     return { start, end };
+  }
+}
+
+// Anchors are zero-width generated markers (generated length 0) that the
+// extractor emits in front of synthesized code so diagnostics reported there
+// map back to a source range. They never overlap a generated span positively,
+// so `getReportableGeneratedRange` skips them. When a diagnostic has no copied
+// token of its own, snap it to the earliest anchor point inside its span; a
+// zero-width generated query at that point resolves to the anchor's full source
+// range.
+function getAnchoredGeneratedRange(
+  startOffset: number,
+  endOffset: number,
+  map: Mapper,
+  shouldReport: (data: CodeInformation) => boolean,
+) {
+  let anchor: number | undefined;
+
+  for (const mapping of map.mappings) {
+    if (!shouldReport(mapping.data)) continue;
+
+    for (let index = 0; index < mapping.generatedOffsets.length; index++) {
+      if (getGeneratedLength(mapping, index) !== 0) continue;
+
+      const offset = mapping.generatedOffsets[index]!;
+      if (offset < startOffset || offset > endOffset) continue;
+
+      if (anchor === undefined || offset < anchor) anchor = offset;
+    }
+  }
+
+  if (anchor !== undefined) {
+    return { start: anchor, end: anchor };
   }
 }
 

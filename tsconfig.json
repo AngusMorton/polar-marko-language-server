@@ -5,6 +5,7 @@
     { "path": "./packages/language-core" },
     { "path": "./packages/component-meta" },
     { "path": "./packages/language-server" },
+    { "path": "./packages/ts-plugin" },
     { "path": "./packages/type-check" },
     { "path": "./packages/vscode" }
   ]

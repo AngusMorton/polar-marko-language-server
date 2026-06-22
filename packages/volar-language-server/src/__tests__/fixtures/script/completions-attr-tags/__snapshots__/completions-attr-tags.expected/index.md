@@ -53,7 +53,7 @@ No completions.
    5 |
    6 | <test-tag>
 >  7 |   <@item x/>
-     |    ^^^^^ Object literal may only specify known properties, and '["item"/*@item*/]' does not exist in type 'Input'.
+     |    ^^^^^ Object literal may only specify known properties, and '["item"]' does not exist in type 'Input'.
    8 |   //       ^|
    9 | </test-tag>
   10 |
@@ -64,7 +64,7 @@ No completions.
   10 |
   11 | <fancy-button>
 > 12 |   <@/>
-     |    ^ Object literal may only specify known properties, and '[""/*@*/]' does not exist in type 'Input'.
+     |    ^ Object literal may only specify known properties, and '[""]' does not exist in type 'Input'.
   13 |   // ^|
   14 | </fancy-button>
   15 |
